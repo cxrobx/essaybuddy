@@ -1,0 +1,4 @@
+interface:
+  display_name: "Humanize Text"
+  short_description: "Make drafts sound natural and personal."
+  default_prompt: "Rewrite this text so it sounds natural and human while preserving meaning."

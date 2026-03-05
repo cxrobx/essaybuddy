@@ -1,0 +1,129 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: #E8DCC8;
+  color: #2C1F0E;
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+}
+
+::selection {
+  background: rgba(212, 184, 150, 0.4);
+  color: inherit;
+}
+
+/* Thin scrollbars */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #C4A882; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #A0845C; }
+
+/* TipTap editor styles */
+.tiptap {
+  outline: none;
+  min-height: 100%;
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: 2rem 3rem;
+  font-size: 16px;
+  line-height: 1.7;
+  color: #2C1F0E;
+}
+
+.tiptap p {
+  margin: 0 0 1em 0;
+}
+
+.tiptap h1 {
+  font-family: Georgia, "Libre Baskerville", serif;
+  font-size: 2em;
+  font-weight: 700;
+  margin: 0 0 0.5em 0;
+  color: #2C1F0E;
+}
+
+.tiptap h2 {
+  font-family: Georgia, "Libre Baskerville", serif;
+  font-size: 1.5em;
+  font-weight: 600;
+  margin: 1.5em 0 0.5em 0;
+  color: #3D2B14;
+}
+
+.tiptap h3 {
+  font-family: Georgia, "Libre Baskerville", serif;
+  font-size: 1.25em;
+  font-weight: 600;
+  margin: 1.5em 0 0.5em 0;
+  color: #5C4023;
+}
+
+.tiptap ul,
+.tiptap ol {
+  padding-left: 1.5em;
+  margin: 0 0 1em 0;
+}
+
+.tiptap li {
+  margin: 0.25em 0;
+}
+
+.tiptap blockquote {
+  border-left: 3px solid #D4C5A9;
+  padding-left: 1em;
+  margin: 1em 0;
+  color: #8B7355;
+  font-style: italic;
+}
+
+.tiptap mark {
+  background-color: rgba(196, 146, 58, 0.25);
+  padding: 0.1em 0.2em;
+  border-radius: 2px;
+}
+
+.tiptap ::selection {
+  background: rgba(212, 184, 150, 0.4);
+}
+
+.tiptap p.is-editor-empty:first-child::before {
+  color: #A0845C;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* Page break indicators */
+.page-break-indicator {
+  position: relative;
+  margin: 1.5rem -3rem;
+  border-top: 1px dashed #D4C5A9;
+  pointer-events: none;
+  user-select: none;
+}
+
+.page-break-indicator::after {
+  content: "Page " attr(data-page);
+  position: absolute;
+  top: -0.65em;
+  left: 50%;
+  transform: translateX(-50%);
+  background: white;
+  padding: 0 0.75rem;
+  font-size: 10px;
+  color: #8B7355;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+}

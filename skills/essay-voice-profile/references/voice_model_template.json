@@ -1,0 +1,28 @@
+{
+  "voice_profile": {
+    "summary": "One-paragraph characterization of the author's voice across essays.",
+    "tone": "Describe overall register and emotional posture.",
+    "sentence_patterns": "Describe sentence length, clause complexity, punctuation habits, and rhythm.",
+    "argument_style": "Describe how claims are built, supported, and concluded.",
+    "vocabulary_level": "Describe diction level and lexical patterns.",
+    "rhetorical_devices": [
+      "Device 1 with brief evidence",
+      "Device 2 with brief evidence"
+    ],
+    "transition_patterns": "Describe common connectors and flow signals.",
+    "paragraph_structure": "Describe the dominant paragraph pattern.",
+    "distinctive_phrases": [
+      "Literal phrase 1",
+      "Literal phrase 2"
+    ],
+    "what_to_avoid": "List style traits generation should avoid."
+  },
+  "voice_examples": [
+    {
+      "excerpt": "Representative passage copied verbatim from provided essays.",
+      "demonstrates": "What this passage demonstrates about the author's style."
+    }
+  ],
+  "generated_at": "2026-03-05T00:00:00Z",
+  "model_used": "codex-gpt-5"
+}

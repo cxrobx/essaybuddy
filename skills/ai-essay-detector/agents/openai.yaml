@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI Essay Detector"
+  short_description: "Detect AI-like patterns in essay text using Codex headless mode."
+  default_prompt: "Analyze this essay for AI-like patterns and return strict JSON risk output."

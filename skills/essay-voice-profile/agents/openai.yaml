@@ -1,0 +1,4 @@
+interface:
+  display_name: "Essay Voice Profile"
+  short_description: "Build voice profiles from essay samples."
+  default_prompt: "Create a voice profile JSON from the provided essays."
