@@ -278,6 +278,16 @@ export default function Editor() {
     [editorInstance]
   );
 
+  const handleFullEssayGenerated = useCallback(
+    (text: string) => {
+      if (!essay || !editorInstance) return;
+      setEssay((prev) => (prev ? { ...prev, content: text } : prev));
+      scheduleSave({ content: text });
+      editorInstance.commands.setContent(text);
+    },
+    [essay, editorInstance, scheduleSave]
+  );
+
   const handleTextbookUploaded = useCallback(
     (textbook: Textbook) => {
       setTextbooks((prev) => [...prev, textbook]);
@@ -551,6 +561,7 @@ export default function Editor() {
             onRunDetection={handleRunDetection}
             onFixFlag={handleFixFlag}
             onApplyChatEdit={handleApplyChatEdit}
+            onFullEssayGenerated={handleFullEssayGenerated}
           />
         )}
 

@@ -86,6 +86,14 @@ class SentenceStartersRequest(BaseModel):
     instructions: Optional[str] = None
 
 
+class GenerateFullEssayRequest(BaseModel):
+    essay_id: str
+    profile_id: str
+    citation_style: Optional[str] = None
+    instructions: Optional[str] = None
+    target_word_count: Optional[int] = None
+
+
 class ChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = None
@@ -196,12 +204,32 @@ def _build_metrics_context(metrics: dict) -> str:
     return "\n".join(lines)
 
 
-def _load_sample_excerpts(per_sample: int = 2000) -> str:
-    """Load truncated excerpts from uploaded samples as reference material."""
+def _load_sample_excerpts(per_sample: int = 2000, profile_id: Optional[str] = None) -> str:
+    """Load truncated excerpts from uploaded samples as reference material.
+
+    If profile_id is given, only load samples that belong to that profile.
+    """
     samples_dir = data_root() / "samples"
+
+    # Determine which sample IDs to include
+    allowed_ids: Optional[set] = None
+    if profile_id:
+        profile_path = data_root() / "profiles" / f"{profile_id}.json"
+        if profile_path.exists():
+            try:
+                profile_data = json.loads(profile_path.read_text(encoding="utf-8"))
+                sid_list = profile_data.get("sample_ids", [])
+                if sid_list:
+                    allowed_ids = set(sid_list)
+            except (json.JSONDecodeError, KeyError):
+                pass
+
     texts = []
     for f in sorted(samples_dir.glob("*.json"), key=lambda p: p.stat().st_mtime):
         try:
+            sample_id = f.stem
+            if allowed_ids is not None and sample_id not in allowed_ids:
+                continue
             data = json.loads(f.read_text(encoding="utf-8"))
             text = data.get("text", "").strip()
             if text:
@@ -477,11 +505,10 @@ Return ONLY the JSON array, no other text."""
     provider = get_provider()
     try:
         result = await provider.generate(prompt)
-        try:
-            parsed = json.loads(result)
+        parsed = _extract_json_array(result)
+        if parsed is not None:
             return {"sections": parsed}
-        except json.JSONDecodeError:
-            return {"sections": [], "raw": result}
+        return {"sections": [], "raw": result}
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
@@ -549,6 +576,212 @@ Return ONLY the JSON object."""
             return {"score": None, "feedback": result}
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
+
+
+MAX_RESEARCH_PAPERS = 5
+
+
+def _load_linked_research_papers(essay_id: str) -> str:
+    """Load research papers linked to this essay as XML context (max 5)."""
+    papers_dir = data_root() / "research" / "papers"
+    if not papers_dir.exists():
+        return ""
+    papers = []
+    for f in papers_dir.glob("*.json"):
+        try:
+            p = json.loads(f.read_text(encoding="utf-8"))
+            if essay_id in p.get("essay_ids", []):
+                papers.append(p)
+        except (json.JSONDecodeError, KeyError):
+            continue
+    if not papers:
+        return ""
+    papers = papers[:MAX_RESEARCH_PAPERS]
+    lines = ["<research-papers>", "## Linked Research Papers (cite where relevant)"]
+    for p in papers:
+        lines.append(f"### {p.get('title', 'Untitled')}")
+        authors = p.get("authors", [])
+        if authors:
+            names = [a.get("name", "") for a in authors[:5]]
+            lines.append(f"Authors: {', '.join(names)}")
+        year = p.get("year")
+        if year:
+            lines.append(f"Year: {year}")
+        tldr = p.get("tldr", "") or p.get("abstract", "") or ""
+        if tldr:
+            lines.append(f"Summary: {tldr[:500]}")
+        doi = p.get("doi")
+        if doi:
+            lines.append(f"DOI: {doi}")
+        lines.append("")
+    lines.append("</research-papers>")
+    return "\n".join(lines)
+
+
+def _load_evidence_for_essay(essay_id: str) -> list:
+    """Load evidence items for an essay."""
+    path = data_root() / "evidence" / f"{essay_id}.json"
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data.get("items", [])
+    except (json.JSONDecodeError, KeyError):
+        return []
+
+
+def _build_evidence_context(items: list) -> str:
+    """Build evidence XML block from a list of evidence items."""
+    if not items:
+        return ""
+    lines = ["<evidence>", "## Textbook Evidence (integrate these quotes naturally with proper citations)"]
+    for ev in items:
+        quote = ev.get("quote", "")
+        page = ev.get("page_number", "")
+        title = ev.get("textbook_title", "")
+        relevance = ev.get("relevance", "")
+        lines.append(f'- "{quote}" (p. {page}, {title})')
+        if relevance:
+            lines.append(f"  Relevance: {relevance}")
+    lines.append("</evidence>")
+    return "\n".join(lines)
+
+
+MAX_SECTIONS = 10
+MAX_PREV_SUMMARY_SECTIONS = 3
+
+
+@router.post("/generate-full-essay")
+async def generate_full_essay(body: GenerateFullEssayRequest):
+    """Generate a complete essay section-by-section using all available context."""
+    # 1. Load essay
+    essay_path = data_root() / "essays" / f"{body.essay_id}.md"
+    if not essay_path.exists():
+        raise HTTPException(status_code=404, detail="Essay not found")
+    post = frontmatter.loads(essay_path.read_text(encoding="utf-8"))
+    meta = post.metadata
+    topic = meta.get("topic", "")
+    thesis = meta.get("thesis", "")
+    instructions = body.instructions or meta.get("instructions", "")
+    target_word_count = body.target_word_count or meta.get("target_word_count")
+
+    # Citation style: request value first, else essay frontmatter
+    citation_style = body.citation_style or meta.get("citation_style")
+
+    # 2. Load outline
+    outline_path = data_root() / "essays" / f"{body.essay_id}.outline.json"
+    if not outline_path.exists():
+        raise HTTPException(status_code=400, detail="No outline found. Generate an outline first.")
+    outline = json.loads(outline_path.read_text(encoding="utf-8"))
+    if not outline:
+        raise HTTPException(status_code=400, detail="Outline is empty. Add sections first.")
+
+    # Cap sections to prevent unbounded runtime
+    if len(outline) > MAX_SECTIONS:
+        outline = outline[:MAX_SECTIONS]
+
+    # 3. Load profile, samples (scoped to profile), research, evidence
+    profile = _load_profile(body.profile_id)
+    style_ctx = _build_style_context(profile)
+    samples_ctx = _load_sample_excerpts(per_sample=1500, profile_id=body.profile_id)
+    research_ctx = _load_linked_research_papers(body.essay_id)
+    all_evidence = _load_evidence_for_essay(body.essay_id)
+
+    briefing = _build_essay_briefing(topic, thesis, target_word_count, instructions)
+    directive = _voice_directive(profile) + _citation_directive(citation_style)
+
+    # Full outline overview
+    outline_overview = "\n".join(
+        f"{i+1}. {s.get('title', 'Untitled')}" + (f" — {s.get('notes', '')}" if s.get('notes') else "")
+        for i, s in enumerate(outline)
+    )
+
+    # 4. Generate section by section (no per-section humanize — single pass at end)
+    provider = get_provider()
+    generated_sections = []
+    total = len(outline)
+    error_msg = None
+
+    for i, section in enumerate(outline):
+        section_id = section.get("id", "")
+        section_title = section.get("title", f"Section {i+1}")
+        section_notes = section.get("notes", "")
+
+        # Filter evidence for this section
+        section_evidence = [e for e in all_evidence if e.get("section_id") == section_id]
+        evidence_ctx = _build_evidence_context(section_evidence)
+
+        # Rolling window: only last N sections for continuity context
+        prev_summary = ""
+        recent = generated_sections[-MAX_PREV_SUMMARY_SECTIONS:]
+        if recent:
+            summary_lines = []
+            for prev_title, prev_text in recent:
+                sentences = [s.strip() for s in prev_text.split(".") if s.strip()]
+                if sentences:
+                    first = sentences[0] + "."
+                    last = (sentences[-1] + ".") if len(sentences) > 1 else ""
+                    summary_lines.append(f"{prev_title}: {first}" + (f" ... {last}" if last else ""))
+            prev_summary = "<previous-sections>\n" + "\n".join(summary_lines) + "\n</previous-sections>"
+
+        # Section position guidance
+        position_guidance = ""
+        if i == 0:
+            position_guidance = "This is the INTRODUCTION. Open with a hook, introduce the topic, and present the thesis."
+        elif i == total - 1:
+            position_guidance = "This is the CONCLUSION. Summarize key arguments, restate the thesis in a new way, and end with a compelling closing thought."
+
+        prompt = f"""{style_ctx}
+
+{samples_ctx}
+{briefing}
+{research_ctx}
+{evidence_ctx}
+{prev_summary}
+
+<outline-overview>
+Full essay structure:
+{outline_overview}
+</outline-overview>
+
+Write section {i+1} of {total}: "{section_title}"
+Notes: {section_notes}
+
+{directive}
+
+Write 2-4 paragraphs. Maintain continuity with previous sections.
+{position_guidance}
+Return ONLY the essay text, no headings or metadata."""
+
+        try:
+            result = await provider.generate(prompt)
+            generated_sections.append((section_title, result))
+        except (RuntimeError, asyncio.TimeoutError) as e:
+            error_msg = f"Failed at section {i+1} ({section_title}): {str(e)}"
+            break
+
+    if not generated_sections:
+        raise HTTPException(status_code=502, detail=error_msg or "Generation failed entirely")
+
+    # 5. Stitch with markdown headings
+    parts = []
+    for title, text in generated_sections:
+        parts.append(f"## {title}\n\n{text}")
+    full_text = "\n\n".join(parts)
+
+    # 6. Single humanize pass on the full essay (cheaper than N passes)
+    try:
+        full_text = await _humanize_pass(full_text, profile)
+    except RuntimeError:
+        pass  # Use unhumanized text rather than failing
+
+    return {
+        "text": full_text,
+        "sections_generated": len(generated_sections),
+        "total_sections": total,
+        "partial": len(generated_sections) < total,
+        "error": error_msg,
+    }
 
 
 def _build_chat_prompt(body: ChatRequest) -> str:

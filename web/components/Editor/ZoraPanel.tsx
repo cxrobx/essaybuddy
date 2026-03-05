@@ -34,6 +34,7 @@ export default function ZoraPanel({
   onRunDetection,
   onFixFlag,
   onApplyChatEdit,
+  onFullEssayGenerated,
 }: {
   onClose: () => void;
   essayId: string | null;
@@ -54,6 +55,7 @@ export default function ZoraPanel({
   onRunDetection: () => void;
   onFixFlag: (excerpt: string) => Promise<string>;
   onApplyChatEdit: (find: string, replace: string) => void;
+  onFullEssayGenerated?: (text: string) => void;
 }) {
   const [tab, setTab] = useState<ZoraTab>("tools");
 
@@ -100,6 +102,7 @@ export default function ZoraPanel({
           wholeEssayText={wholeEssayText}
           getSelectedText={getSelectedText}
           onTextGenerated={onTextGenerated}
+          onFullEssayGenerated={onFullEssayGenerated}
           evidenceItems={evidenceItems}
           outlineSections={outlineSections}
           instructions={instructions}

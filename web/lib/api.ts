@@ -226,6 +226,31 @@ export async function generateSentenceStarters(params: {
   return res.json();
 }
 
+export async function generateFullEssay(
+  essayId: string,
+  profileId: string,
+  citationStyle?: string,
+  instructions?: string,
+  targetWordCount?: number | null,
+): Promise<{ text: string; sections_generated: number; total_sections: number; partial: boolean; error?: string }> {
+  const res = await fetch(`${BASE}/ai/generate-full-essay`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      essay_id: essayId,
+      profile_id: profileId,
+      citation_style: citationStyle || undefined,
+      instructions: instructions || undefined,
+      target_word_count: targetWordCount || undefined,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Generation failed" }));
+    throw new Error(err.detail || "Failed to generate full essay");
+  }
+  return res.json();
+}
+
 export async function getStyleScore(text: string, profileId: string): Promise<AIScoreResult> {
   const res = await fetch(`${BASE}/ai/style-score`, {
     method: "POST",

@@ -6,6 +6,7 @@ import {
   rephraseText,
   humanizeText,
   getStyleScore,
+  generateFullEssay,
 } from "@/lib/api";
 import type { OutlineSection, EvidenceItem } from "@/lib/types";
 
@@ -20,6 +21,7 @@ export default function AIPanel({
   wholeEssayText,
   getSelectedText,
   onTextGenerated,
+  onFullEssayGenerated,
   evidenceItems,
   outlineSections,
   instructions,
@@ -33,6 +35,7 @@ export default function AIPanel({
   wholeEssayText: string;
   getSelectedText: () => string;
   onTextGenerated: (text: string) => void;
+  onFullEssayGenerated?: (text: string) => void;
   evidenceItems?: EvidenceItem[];
   outlineSections?: OutlineSection[];
   instructions?: string;
@@ -44,9 +47,41 @@ export default function AIPanel({
   const [error, setError] = useState<string>("");
   const [sectionTitle, setSectionTitle] = useState("");
   const [sectionNotes, setSectionNotes] = useState("");
+  const [fullEssayLoading, setFullEssayLoading] = useState(false);
+  const [fullEssayError, setFullEssayError] = useState("");
+  const [fullEssayPartial, setFullEssayPartial] = useState("");
 
   const noProfile = !profileId;
   const buttonDisabled = loading || noProfile;
+  const hasOutline = outlineSections && outlineSections.length > 0;
+
+  const handleGenerateFullEssay = async () => {
+    if (!essayId || !profileId || !hasOutline) return;
+    if (wholeEssayText.trim()) {
+      const confirmed = window.confirm(
+        "This will replace your current essay content. Continue?"
+      );
+      if (!confirmed) return;
+    }
+    setFullEssayLoading(true);
+    setFullEssayError("");
+    setFullEssayPartial("");
+    try {
+      const res = await generateFullEssay(
+        essayId, profileId, citationStyle, instructions, targetWordCount
+      );
+      if (res.partial) {
+        setFullEssayPartial(
+          `Generated ${res.sections_generated} of ${res.total_sections} sections. ${res.error || ""}`
+        );
+      }
+      onFullEssayGenerated?.(res.text);
+    } catch (e) {
+      setFullEssayError(e instanceof Error ? e.message : "Generation failed");
+    } finally {
+      setFullEssayLoading(false);
+    }
+  };
 
   const handleGenerate = async () => {
     if (!profileId) {
@@ -132,6 +167,36 @@ export default function AIPanel({
       )}
 
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        {/* Generate Full Essay */}
+        <div className="rounded-lg border border-macos-accent/30 bg-macos-accent/5 p-3 space-y-2">
+          <div className="text-xs font-semibold text-macos-accent">Generate Full Essay</div>
+          <p className="text-[10px] text-macos-text-secondary leading-relaxed">
+            Generate a complete essay from your writing plan, outline, evidence, and research — all in your voice.
+          </p>
+          <button
+            onClick={handleGenerateFullEssay}
+            disabled={fullEssayLoading || noProfile || !essayId || !hasOutline}
+            className="w-full px-3 py-2 rounded text-xs font-medium bg-macos-accent hover:bg-macos-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
+          >
+            {fullEssayLoading ? "Generating... (this may take 1-2 min)" : "Generate Full Essay"}
+          </button>
+          {!hasOutline && !noProfile && essayId && (
+            <p className="text-[10px] text-macos-warning">Generate an outline first.</p>
+          )}
+          {fullEssayError && (
+            <div className="p-2 rounded bg-macos-error/10 border border-macos-error/30 text-[10px] text-macos-error">
+              {fullEssayError}
+            </div>
+          )}
+          {fullEssayPartial && (
+            <div className="p-2 rounded bg-macos-warning/10 border border-macos-warning/30 text-[10px] text-macos-warning">
+              {fullEssayPartial}
+            </div>
+          )}
+        </div>
+
+        <div className="border-t border-macos-border" />
+
         {/* Action selector */}
         <div className="space-y-1">
           {actions.map((a) => (
