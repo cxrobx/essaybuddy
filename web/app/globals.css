@@ -4,6 +4,34 @@
 
 :root {
   color-scheme: light;
+  --macos-bg: 232 220 200;
+  --macos-surface: 255 253 247;
+  --macos-elevated: 251 245 236;
+  --macos-border: 212 197 169;
+  --macos-text: 44 31 14;
+  --macos-text-secondary: 139 115 85;
+  --macos-accent: 125 155 118;
+  --macos-accent-hover: 92 122 86;
+  --macos-success: 125 155 118;
+  --macos-error: 196 92 74;
+  --macos-warning: 196 146 58;
+  --shadow-color: 44 31 14;
+}
+
+:root.dark {
+  color-scheme: dark;
+  --macos-bg: 28 26 23;
+  --macos-surface: 42 39 34;
+  --macos-elevated: 53 49 43;
+  --macos-border: 74 68 57;
+  --macos-text: 232 220 200;
+  --macos-text-secondary: 160 144 120;
+  --macos-accent: 143 179 136;
+  --macos-accent-hover: 120 158 113;
+  --macos-success: 143 179 136;
+  --macos-error: 212 118 106;
+  --macos-warning: 212 168 90;
+  --shadow-color: 0 0 0;
 }
 
 * {
@@ -11,22 +39,22 @@
 }
 
 body {
-  background: #E8DCC8;
-  color: #2C1F0E;
+  background: rgb(var(--macos-bg));
+  color: rgb(var(--macos-text));
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
 }
 
 ::selection {
-  background: rgba(212, 184, 150, 0.4);
+  background: rgb(var(--macos-border) / 0.4);
   color: inherit;
 }
 
 /* Thin scrollbars */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #C4A882; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #A0845C; }
+::-webkit-scrollbar-thumb { background: rgb(var(--macos-border)); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgb(var(--macos-text-secondary)); }
 
 /* TipTap editor styles */
 .tiptap {

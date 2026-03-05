@@ -30,6 +30,8 @@ export type Essay = {
 export type EssayListItem = {
   id: string;
   title: string;
+  topic?: string;
+  word_count: number;
   updated_at: string;
   created_at: string;
 };

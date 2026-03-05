@@ -1,6 +1,7 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
+  darkMode: "class",
   content: [
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -13,22 +14,22 @@ const config: Config = {
       },
       colors: {
         macos: {
-          bg:             "#E8DCC8",
-          surface:        "#FFFDF7",
-          elevated:       "#FBF5EC",
-          border:         "#D4C5A9",
-          text:           "#2C1F0E",
-          "text-secondary": "#8B7355",
-          accent:         "#7D9B76",
-          "accent-hover": "#5C7A56",
-          success:        "#7D9B76",
-          error:          "#C45C4A",
-          warning:        "#C4923A",
+          bg:             "rgb(var(--macos-bg) / <alpha-value>)",
+          surface:        "rgb(var(--macos-surface) / <alpha-value>)",
+          elevated:       "rgb(var(--macos-elevated) / <alpha-value>)",
+          border:         "rgb(var(--macos-border) / <alpha-value>)",
+          text:           "rgb(var(--macos-text) / <alpha-value>)",
+          "text-secondary": "rgb(var(--macos-text-secondary) / <alpha-value>)",
+          accent:         "rgb(var(--macos-accent) / <alpha-value>)",
+          "accent-hover": "rgb(var(--macos-accent-hover) / <alpha-value>)",
+          success:        "rgb(var(--macos-success) / <alpha-value>)",
+          error:          "rgb(var(--macos-error) / <alpha-value>)",
+          warning:        "rgb(var(--macos-warning) / <alpha-value>)",
         },
       },
       boxShadow: {
-        macos:    "0 2px 8px rgba(44,31,14,0.08), 0 0 1px rgba(44,31,14,0.12)",
-        "macos-lg": "0 10px 40px rgba(44,31,14,0.12), 0 0 1px rgba(44,31,14,0.08)",
+        macos:    "0 2px 8px rgb(var(--shadow-color) / 0.08), 0 0 1px rgb(var(--shadow-color) / 0.12)",
+        "macos-lg": "0 10px 40px rgb(var(--shadow-color) / 0.12), 0 0 1px rgb(var(--shadow-color) / 0.08)",
       },
     },
   },

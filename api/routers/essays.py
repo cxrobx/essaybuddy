@@ -145,6 +145,8 @@ async def list_essays():
             essays.append({
                 "id": essay_id,
                 "title": meta.get("title", "Untitled"),
+                "topic": meta.get("topic"),
+                "word_count": len(post.content.split()) if post.content else 0,
                 "updated_at": meta.get("updated_at"),
                 "created_at": meta.get("created_at"),
             })

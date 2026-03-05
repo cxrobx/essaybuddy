@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import EssayManager from "@/components/EssayManager";
 
 export default function Home() {
-  redirect("/editor");
+  return <EssayManager />;
 }

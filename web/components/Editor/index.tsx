@@ -11,10 +11,12 @@ import {
 } from "@/lib/api";
 import { useAutoSave } from "@/lib/useAutoSave";
 import type { Essay, OutlineSection, SaveStatus, StyleMetrics, Textbook, EvidenceItem, AIDetectionResult } from "@/lib/types";
+import Link from "next/link";
 import OutlinePanel from "./OutlinePanel";
 import SectionNav from "./SectionNav";
 import Toolbar from "./Toolbar";
 import ZoraPanel from "./ZoraPanel";
+import { useTheme } from "@/lib/useTheme";
 import StatusBadge from "@/components/ui/StatusBadge";
 import SampleList from "@/components/Samples/SampleList";
 import ProfileCreator from "@/components/Samples/ProfileCreator";
@@ -27,7 +29,7 @@ import WritingPlanModal from "./WritingPlanModal";
 
 const RichTextEditor = dynamic(() => import("./RichTextEditor"), { ssr: false });
 
-export default function Editor() {
+export default function Editor({ essayId }: { essayId?: string | null }) {
   const [essay, setEssay] = useState<Essay | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -54,18 +56,24 @@ export default function Editor() {
   const [detectionLoading, setDetectionLoading] = useState(false);
   const [detectionError, setDetectionError] = useState("");
 
+  const { theme, toggleTheme } = useTheme();
   const { status, scheduleSave, saveNow } = useAutoSave(essay?.id ?? null);
 
   // Load or create essay on mount
   useEffect(() => {
     (async () => {
       try {
-        const essays = await listEssays();
         let current: Essay;
-        if (essays.length > 0) {
-          current = await getEssay(essays[0].id);
+        if (essayId) {
+          current = await getEssay(essayId);
         } else {
-          current = await createEssay("My Essay");
+          // Fallback: most recent or create new
+          const essays = await listEssays();
+          if (essays.length > 0) {
+            current = await getEssay(essays[0].id);
+          } else {
+            current = await createEssay("My Essay");
+          }
         }
         setEssay(current);
 
@@ -123,12 +131,16 @@ export default function Editor() {
           } catch {}
         }
       } catch (e) {
-        setError("Could not reach API. Is it running on :8002?");
+        if (essayId) {
+          setError("Essay not found. It may have been deleted.");
+        } else {
+          setError("Could not reach API. Is it running on :8002?");
+        }
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [essayId]);
 
   const handleContentUpdate = useCallback(
     (markdown: string) => {
@@ -415,10 +427,13 @@ export default function Editor() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-screen bg-macos-bg">
+      <div className="flex flex-col items-center justify-center h-screen bg-macos-bg gap-4">
         <div className="bg-macos-error/10 border border-macos-error/30 rounded-lg px-6 py-4 text-sm text-macos-error">
           {error}
         </div>
+        <Link href="/" className="text-sm text-macos-accent hover:underline">
+          Back to Essays
+        </Link>
       </div>
     );
   }
@@ -428,6 +443,13 @@ export default function Editor() {
       {/* Top bar */}
       <header className="grid grid-cols-[auto_1fr_auto] items-center px-4 py-2 bg-macos-surface border-b border-macos-border flex-shrink-0">
         <div className="flex items-center gap-3">
+          <Link
+            href="/"
+            className="text-macos-text-secondary hover:text-macos-text transition-colors text-sm"
+            title="All Essays"
+          >
+            &larr;
+          </Link>
           <span className="font-serif font-semibold text-sm tracking-tight text-macos-text">
             &#9998; Zora
           </span>
@@ -472,6 +494,13 @@ export default function Editor() {
             }`}
           >
             Research
+          </button>
+          <button
+            onClick={toggleTheme}
+            className="px-3 py-1 rounded-full text-xs font-medium border border-macos-border hover:border-macos-accent text-macos-text-secondary hover:text-macos-text transition-colors"
+            title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+          >
+            {theme === "light" ? "\u263D" : "\u2600"}
           </button>
         </div>
       </header>
