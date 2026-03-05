@@ -52,7 +52,7 @@ export default function Toolbar({
         onClick={onAIClick}
         className="px-3 py-1 rounded text-xs font-medium bg-macos-accent hover:bg-macos-accent-hover text-white transition-colors flex items-center gap-1"
       >
-        Zora <span className="text-[10px]">&#10024;</span>
+        Zora <span className="text-[10px]">&#9734;</span>
       </button>
     </div>
   );
