@@ -16,12 +16,6 @@ class CodexProvider(AIProvider):
 
     async def generate(self, prompt: str) -> str:
         with tempfile.TemporaryDirectory() as tmpdir:
-            # Write prompt to a file to avoid stdin pipe issues
-            prompt_file = os.path.join(tmpdir, "prompt.txt")
-            with open(prompt_file, "w", encoding="utf-8") as f:
-                f.write(prompt)
-
-            # Use real HOME so Codex can access its OAuth tokens in ~/.codex/auth.json
             env = {
                 "PATH": os.environ.get("PATH", ""),
                 "HOME": os.environ.get("HOME", tmpdir),
@@ -32,7 +26,21 @@ class CodexProvider(AIProvider):
                 if val:
                     env[key] = val
 
-            # Read prompt from file via stdin redirect, use --ephemeral to skip session persistence
+            # Write a minimal config that disables MCP servers to avoid startup latency
+            codex_dir = os.path.join(tmpdir, ".codex")
+            os.makedirs(codex_dir, exist_ok=True)
+            with open(os.path.join(codex_dir, "config.toml"), "w") as cf:
+                cf.write('[mcp_servers]\n')  # empty = no MCP servers
+
+            # Copy auth from real home
+            real_home = os.environ.get("HOME", "")
+            real_auth = os.path.join(real_home, ".codex", "auth.json")
+            if os.path.exists(real_auth):
+                import shutil
+                shutil.copy2(real_auth, os.path.join(codex_dir, "auth.json"))
+
+            env["HOME"] = tmpdir  # use tmpdir HOME with our minimal config
+
             proc = await asyncio.create_subprocess_exec(
                 "codex", "exec", "--full-auto", "--skip-git-repo-check", "--ephemeral",
                 stdin=asyncio.subprocess.PIPE,
