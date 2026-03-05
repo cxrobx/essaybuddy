@@ -1,0 +1,4 @@
+interface:
+  display_name: "Essay Outline Generator"
+  short_description: "Generate structured essay outlines matching your voice."
+  default_prompt: "Generate an outline for the specified essay."

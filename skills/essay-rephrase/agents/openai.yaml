@@ -1,0 +1,4 @@
+interface:
+  display_name: "Essay Rephraser"
+  short_description: "Rephrase text to match a voice profile."
+  default_prompt: "Rephrase this text to match the specified writing style."

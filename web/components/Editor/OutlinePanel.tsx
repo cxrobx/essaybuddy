@@ -389,7 +389,7 @@ export default function OutlinePanel({
   );
 }
 
-const DURATION_MS = 90_000;
+const DURATION_MS = 60_000;
 const TICK_MS = 200;
 
 function GeneratingProgress() {

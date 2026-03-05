@@ -63,3 +63,17 @@ Prefer concise replacements:
 
 - Default output: rewritten text only.
 - If explicitly requested: append a short `Change notes` section with top edits.
+
+## Headless Script
+
+Use the script for non-interactive/CI runs:
+
+```bash
+echo "text to humanize" | python3 skills/humanize-text/scripts/humanize.py --stdin --profile-id <profile_id>
+```
+
+Essay mode:
+
+```bash
+python3 skills/humanize-text/scripts/humanize.py --essay-id <essay_id>
+```

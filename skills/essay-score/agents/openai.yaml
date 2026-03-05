@@ -1,0 +1,4 @@
+interface:
+  display_name: "Style Scorer"
+  short_description: "Score text against a voice profile."
+  default_prompt: "Score this text for style match against the profile."

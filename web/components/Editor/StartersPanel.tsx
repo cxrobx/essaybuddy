@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import type { OutlineSection, EvidenceItem, SentenceStarterSection } from "@/lib/types";
 import { generateSentenceStarters } from "@/lib/api";
 
@@ -103,17 +103,14 @@ export default function StartersPanel({
               ? "Add outline sections first"
               : "No profile assigned"}
           </p>
+        ) : loading ? (
+          <GeneratingProgress />
         ) : (
           <button
             onClick={handleGenerate}
-            disabled={loading}
-            className="w-full px-3 py-1.5 rounded text-xs font-medium bg-macos-accent text-white hover:bg-macos-accent/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="w-full px-3 py-1.5 rounded text-xs font-medium bg-macos-accent text-white hover:bg-macos-accent/90 transition-colors"
           >
-            {loading
-              ? "Generating..."
-              : starters.length > 0
-              ? "Regenerate"
-              : "Generate"}
+            {starters.length > 0 ? "Regenerate" : "Generate"}
           </button>
         )}
         {error && (
@@ -127,11 +124,6 @@ export default function StartersPanel({
           <p className="text-[11px] text-macos-text-secondary text-center py-4">
             Click Generate to create sentence starters for each outline section.
           </p>
-        )}
-        {loading && (
-          <div className="flex items-center justify-center py-8">
-            <div className="animate-spin rounded-full h-5 w-5 border-2 border-macos-accent border-t-transparent" />
-          </div>
         )}
         {starters.map((section, sIdx) => (
           <div key={sIdx}>
@@ -168,6 +160,36 @@ export default function StartersPanel({
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+const DURATION_MS = 60_000;
+const TICK_MS = 200;
+
+function GeneratingProgress() {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    const t0 = Date.now();
+    const id = setInterval(() => setElapsed(Date.now() - t0), TICK_MS);
+    return () => clearInterval(id);
+  }, []);
+
+  const pct = Math.min((elapsed / DURATION_MS) * 100, 99);
+  const secsLeft = Math.max(0, Math.ceil((DURATION_MS - elapsed) / 1000));
+
+  return (
+    <div className="w-full space-y-1">
+      <div className="w-full h-1.5 rounded-full bg-macos-border overflow-hidden">
+        <div
+          className="h-full rounded-full bg-macos-accent transition-[width] duration-200 ease-linear"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <p className="text-[10px] text-macos-text-secondary text-center">
+        Generating{"\u2026"} ~{secsLeft}s remaining
+      </p>
     </div>
   );
 }

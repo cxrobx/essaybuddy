@@ -1,0 +1,4 @@
+interface:
+  display_name: "Section Expander"
+  short_description: "Expand outline sections into voice-matched paragraphs."
+  default_prompt: "Expand the specified section into full paragraphs."
