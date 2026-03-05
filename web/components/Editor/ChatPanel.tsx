@@ -53,6 +53,15 @@ function DiffCard({
   );
 }
 
+const PROMPT_SUGGESTIONS = [
+  "Strengthen my thesis statement",
+  "Improve the flow between paragraphs",
+  "Make my introduction more engaging",
+  "Check for repetitive phrasing",
+  "Suggest a stronger conclusion",
+  "Simplify this paragraph",
+];
+
 export default function ChatPanel({
   essayId,
   profileId,
@@ -82,8 +91,7 @@ export default function ChatPanel({
     }
   }, [messages]);
 
-  const handleSend = useCallback(async () => {
-    const text = input.trim();
+  const sendMessage = useCallback(async (text: string) => {
     if (!text || loading) return;
 
     const userMsg: ChatMessage = {
@@ -140,7 +148,11 @@ export default function ChatPanel({
     } finally {
       setLoading(false);
     }
-  }, [input, loading, sessionId, essayId, profileId, topic, thesis, outlineSections, essayContent]);
+  }, [loading, sessionId, essayId, profileId, topic, thesis, outlineSections, essayContent]);
+
+  const handleSend = useCallback(() => {
+    sendMessage(input.trim());
+  }, [input, sendMessage]);
 
   const handleApplyEdit = useCallback(
     (msgId: string, editId: string, find: string, replace: string) => {
@@ -177,9 +189,20 @@ export default function ChatPanel({
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3">
         {messages.length === 0 && (
-          <div className="text-center text-[11px] text-macos-text-secondary mt-8 space-y-2">
-            <p className="font-medium">Chat with Zora</p>
-            <p className="opacity-70">Ask for help editing your essay. Zora can suggest specific changes.</p>
+          <div className="flex flex-col items-center justify-center h-full text-center text-[11px] text-macos-text-secondary px-3">
+            <p className="font-medium text-macos-text text-xs mb-1">Chat with Zora</p>
+            <p className="opacity-70 mb-4">Ask for help editing your essay.</p>
+            <div className="flex flex-wrap justify-center gap-1.5">
+              {PROMPT_SUGGESTIONS.map((prompt) => (
+                <button
+                  key={prompt}
+                  onClick={() => sendMessage(prompt)}
+                  className="bg-macos-elevated border border-macos-border rounded-full px-2.5 py-1 text-[10px] text-macos-text-secondary hover:border-macos-accent hover:text-macos-text cursor-pointer transition-colors"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
           </div>
         )}
         {messages.map((msg) => (
@@ -217,24 +240,26 @@ export default function ChatPanel({
       </div>
 
       {/* Input area */}
-      <div className="border-t border-macos-border p-2 flex gap-2">
-        <div className="flex-1 flex items-end gap-1">
+      <div className="border-t border-macos-border p-2">
+        <div className="relative bg-macos-elevated rounded-lg border border-macos-border focus-within:border-macos-accent transition-colors">
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Ask Zora to edit your essay..."
-            rows={1}
-            className="flex-1 bg-macos-elevated text-xs text-macos-text rounded-lg px-3 py-2 resize-none outline-none border border-transparent focus:border-macos-accent max-h-20 overflow-y-auto"
-            style={{ minHeight: "36px" }}
+            rows={2}
+            className="w-full bg-transparent text-xs text-macos-text rounded-lg px-3 pt-2 pb-8 resize-none outline-none max-h-32 overflow-y-auto"
+            style={{ minHeight: "56px" }}
           />
-          <button
-            onClick={handleSend}
-            disabled={!input.trim() || loading}
-            className="px-3 py-2 rounded-lg text-xs font-medium bg-macos-accent hover:bg-macos-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors flex-shrink-0"
-          >
-            Send
-          </button>
+          <div className="absolute bottom-1.5 right-1.5">
+            <button
+              onClick={handleSend}
+              disabled={!input.trim() || loading}
+              className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-macos-accent hover:bg-macos-accent-hover disabled:opacity-30 disabled:cursor-not-allowed text-white transition-colors"
+            >
+              Send
+            </button>
+          </div>
         </div>
       </div>
       {messages.length > 0 && (
