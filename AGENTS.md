@@ -50,7 +50,7 @@ essaybuddy/
 │       ├── codex_provider.py  # Codex CLI wrapper
 │       ├── gemini_provider.py # Gemini CLI wrapper
 │       ├── ai_pattern_detector.py # Skill subprocess bridge for AI checks
-│       ├── research_client.py    # Async HTTP client (Semantic Scholar, Unpaywall, CrossRef)
+│       ├── research_client.py    # Async HTTP client (S2 primary, OpenAlex fallback, Unpaywall, CrossRef)
 │       └── citation_formatter.py # Deterministic citation formatting (6 styles)
 ├── web/                   # Next.js 15 frontend
 │   ├── app/
@@ -158,7 +158,7 @@ Outlines are stored as sidecar files: `data/essays/{id}.outline.json`
 | GET | `/ai/detect-patterns/history/{essay_id}` | Get saved detection checks for essay |
 | POST | `/ai/style-score` | Score text against profile |
 | GET/PUT | `/ai/provider` | Get/switch AI provider |
-| GET | `/research/search?q=&year_min=&year_max=&limit=&offset=&fields_of_study=` | Search papers via Semantic Scholar |
+| GET | `/research/search?q=&year_min=&year_max=&limit=&offset=&fields_of_study=` | Search papers via OpenAlex |
 | GET | `/research/paper/{paper_id}` | Paper details + Unpaywall PDF link |
 | POST | `/research/save` | Save paper to local library |
 | GET | `/research/saved?essay_id=` | List saved papers (optional essay filter) |
@@ -177,7 +177,7 @@ Outlines are stored as sidecar files: `data/essays/{id}.outline.json`
 - **AI providers**: CLI subprocess wrappers (Codex/Gemini) with sandboxed execution
 - **AI detector skill**: Project-local skill at `skills/ai-essay-detector` powers pattern checks
 - **Voice models**: AI-generated voice profiles from writing samples, used for style-matched generation
-- **Research pipeline**: Semantic Scholar (search + TLDRs) → Unpaywall (free PDFs by DOI) → CrossRef (citation metadata)
+- **Research pipeline**: Semantic Scholar (primary, has native TLDRs) → OpenAlex (fallback, AI-generated TLDRs) → Unpaywall (free PDFs by DOI) → CrossRef (citation metadata)
 - **Citation formatting**: Deterministic formatter supporting APA7, MLA9, Chicago Notes/Author-Date, IEEE, Harvard
 - **Research storage**: Saved papers at `data/research/papers/{paper_id}.json`, linkable to essays
 - **TipTap editor**: ProseMirror-based with `tiptap-markdown` extension, loaded with `dynamic()` (SSR disabled)
@@ -238,6 +238,8 @@ Generation scripts follow the same prompt structure used by `api/routers/ai.py`:
 | `NEXT_PUBLIC_API_URL` | `http://localhost:8002` | API URL for frontend |
 | `AI_PROVIDER` | `codex` | AI CLI provider (codex/gemini) |
 | `SEMANTIC_SCHOLAR_API_KEY` | *(none)* | Optional S2 API key for higher rate limits |
+| `OPENALEX_API_KEY` | *(none)* | Optional OpenAlex API key for premium access |
+| `OPENALEX_EMAIL` | `essaybuddy@localhost` | Email for OpenAlex fallback polite pool |
 | `UNPAYWALL_EMAIL` | `essaybuddy@localhost` | Email for Unpaywall API identification |
 
 ## Troubleshooting

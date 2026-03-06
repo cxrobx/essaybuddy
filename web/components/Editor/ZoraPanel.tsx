@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import AIPanel from "./AIPanel";
 import AIDetectorPanel from "./AIDetectorPanel";
 import ChatPanel from "./ChatPanel";
-import type { OutlineSection, EvidenceItem, AIDetectionResult } from "@/lib/types";
+import type { OutlineSection, EvidenceItem, AIDetectionResult, CustomAction } from "@/lib/types";
+import { useResizablePanel } from "@/lib/useResizablePanel";
 
 type ZoraTab = "tools" | "detector" | "chat";
 
@@ -35,6 +36,13 @@ export default function ZoraPanel({
   onFixFlag,
   onApplyChatEdit,
   onFullEssayGenerated,
+  initialChatMessage,
+  onChatMessageConsumed,
+  customActions = [],
+  onAddCustomAction,
+  onUpdateCustomAction,
+  onDeleteCustomAction,
+  onCustomActionGenerate,
 }: {
   onClose: () => void;
   essayId: string | null;
@@ -56,11 +64,41 @@ export default function ZoraPanel({
   onFixFlag: (excerpt: string) => Promise<string>;
   onApplyChatEdit: (find: string, replace: string) => void;
   onFullEssayGenerated?: (text: string) => void;
+  initialChatMessage?: string;
+  onChatMessageConsumed?: () => void;
+  customActions?: CustomAction[];
+  onAddCustomAction?: (name: string, instructions: string) => void;
+  onUpdateCustomAction?: (id: string, name: string, instructions: string) => void;
+  onDeleteCustomAction?: (id: string) => void;
+  onCustomActionGenerate?: (text: string, actionId: string) => Promise<string>;
 }) {
   const [tab, setTab] = useState<ZoraTab>("tools");
+  const [detectionElapsed, setDetectionElapsed] = useState(0);
+  const detectionTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (detectionLoading) {
+      setDetectionElapsed(0);
+      detectionTimerRef.current = setInterval(() => setDetectionElapsed((e) => e + 1), 1000);
+    } else {
+      if (detectionTimerRef.current) clearInterval(detectionTimerRef.current);
+      detectionTimerRef.current = null;
+    }
+    return () => {
+      if (detectionTimerRef.current) clearInterval(detectionTimerRef.current);
+    };
+  }, [detectionLoading]);
+
+  // Auto-switch to chat tab when a prefill message arrives
+  useEffect(() => {
+    if (initialChatMessage) {
+      setTab("chat");
+    }
+  }, [initialChatMessage]);
+  const { width: panelWidth, handleMouseDown } = useResizablePanel(320, "right");
 
   return (
-    <div className="w-80 flex-shrink-0 flex flex-col border-l border-macos-border overflow-hidden">
+    <div className="flex-shrink-0 flex flex-col border-l border-macos-border overflow-hidden relative" style={{ width: panelWidth }}>
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-macos-border bg-macos-surface">
         <span className="text-xs font-semibold uppercase tracking-widest text-macos-accent">
@@ -107,18 +145,24 @@ export default function ZoraPanel({
           outlineSections={outlineSections}
           instructions={instructions}
           targetWordCount={targetWordCount}
+          customActions={customActions}
+          onAddCustomAction={onAddCustomAction}
+          onUpdateCustomAction={onUpdateCustomAction}
+          onDeleteCustomAction={onDeleteCustomAction}
+          onCustomActionGenerate={onCustomActionGenerate}
         />
       )}
-      {tab === "detector" && (
+      <div className={tab === "detector" ? "flex-1 flex flex-col overflow-hidden" : "hidden"}>
         <AIDetectorPanel
           result={detectionResult}
           loading={detectionLoading}
           error={detectionError}
+          elapsed={detectionElapsed}
           onRunCheck={onRunDetection}
           onFixFlag={onFixFlag}
           hasProfile={!!profileId}
         />
-      )}
+      </div>
       {tab === "chat" && (
         <ChatPanel
           essayId={essayId}
@@ -128,8 +172,14 @@ export default function ZoraPanel({
           outlineSections={outlineSections}
           essayContent={wholeEssayText}
           onApplyEdit={onApplyChatEdit}
+          initialMessage={initialChatMessage}
+          onMessageConsumed={onChatMessageConsumed}
         />
       )}
+      <div
+        onMouseDown={handleMouseDown}
+        className="absolute top-0 left-0 w-1.5 h-full cursor-col-resize hover:bg-macos-accent/20 transition-colors"
+      />
     </div>
   );
 }

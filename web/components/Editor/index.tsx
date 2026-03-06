@@ -4,24 +4,28 @@ import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import {
   createEssay, getEssay, listEssays, listSamples, listProfiles, getProfile, updateEssay,
-  listTextbooks, getEvidence, assignEvidence as apiAssignEvidence,
+  listTextbooks, uploadTextbook, getEvidence, assignEvidence as apiAssignEvidence,
   unassignEvidence as apiUnassignEvidence, deleteEvidence as apiDeleteEvidence,
   generateOutline, detectAIPatterns, getAIDetectionHistory,
-  rephraseText, humanizeText,
+  rephraseText, humanizeText, getStyleScore, rewriteText,
+  listSavedPapers, linkPaperToEssay,
 } from "@/lib/api";
 import { useAutoSave } from "@/lib/useAutoSave";
-import type { Essay, OutlineSection, SaveStatus, StyleMetrics, Textbook, EvidenceItem, AIDetectionResult } from "@/lib/types";
+import type { Essay, OutlineSection, SaveStatus, StyleMetrics, Textbook, EvidenceItem, AIDetectionResult, SavedPaper } from "@/lib/types";
 import Link from "next/link";
 import OutlinePanel from "./OutlinePanel";
 import SectionNav from "./SectionNav";
 import Toolbar from "./Toolbar";
 import ZoraPanel from "./ZoraPanel";
 import { useTheme } from "@/lib/useTheme";
+import { useCustomActions } from "@/lib/useCustomActions";
 import StatusBadge from "@/components/ui/StatusBadge";
 import SampleList from "@/components/Samples/SampleList";
 import ProfileCreator from "@/components/Samples/ProfileCreator";
 import TextbookUploadModal from "@/components/Textbooks/TextbookUploadModal";
 import ExtractionModal from "@/components/Evidence/ExtractionModal";
+import UploadToast from "@/components/ui/UploadToast";
+import type { UploadToastItem } from "@/components/ui/UploadToast";
 import SourcesPanel from "./SourcesPanel";
 import ResearchPanel from "./ResearchPanel";
 import StartersPanel from "./StartersPanel";
@@ -48,6 +52,7 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
   const [extractionOpen, setExtractionOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [researchOpen, setResearchOpen] = useState(false);
+  const [savedPapers, setSavedPapers] = useState<SavedPaper[]>([]);
   const [startersOpen, setStartersOpen] = useState(false);
   const [writingPlanOpen, setWritingPlanOpen] = useState(false);
   const [generatingOutline, setGeneratingOutline] = useState(false);
@@ -55,8 +60,11 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
   const [detectionResult, setDetectionResult] = useState<AIDetectionResult | null>(null);
   const [detectionLoading, setDetectionLoading] = useState(false);
   const [detectionError, setDetectionError] = useState("");
+  const [uploadToasts, setUploadToasts] = useState<UploadToastItem[]>([]);
+  const [zoraPrefill, setZoraPrefill] = useState("");
 
   const { theme, toggleTheme } = useTheme();
+  const { actions: customActions, addAction: addCustomAction, updateAction: updateCustomAction, deleteAction: deleteCustomAction } = useCustomActions();
   const { status, scheduleSave, saveNow } = useAutoSave(essay?.id ?? null);
 
   // Load or create essay on mount
@@ -96,6 +104,29 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
         try {
           const store = await getEvidence(current.id);
           setEvidenceItems(store.items);
+        } catch {}
+
+        // Load saved papers (all, not filtered by essay)
+        try {
+          const papers = await listSavedPapers();
+          setSavedPapers(papers);
+          // Prune stale paper_ids from outline sections
+          if (current.outline?.length > 0) {
+            const validIds = new Set(papers.map((p) => p.paper_id));
+            let pruned = false;
+            const cleanedOutline = current.outline.map((s) => {
+              if (!s.paper_ids?.length) return s;
+              const filtered = s.paper_ids.filter((id) => validIds.has(id));
+              if (filtered.length !== s.paper_ids.length) {
+                pruned = true;
+                return { ...s, paper_ids: filtered };
+              }
+              return s;
+            });
+            if (pruned) {
+              current.outline = cleanedOutline;
+            }
+          }
         } catch {}
 
         // Load most recent detection result
@@ -262,16 +293,33 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
         essay.citation_style,
         instructions || undefined,
         essay.target_word_count,
+        essay.id,
       );
       if (res.outline.length > 0) {
-        handleOutlineGenerated(
-          res.outline.map((s, i) => ({
+        const newSections = res.outline.map((s, i) => {
+          const newSection: OutlineSection = {
             id: Math.random().toString(36).slice(2, 8),
             title: s.title || `Section ${i + 1}`,
             notes: s.notes || "",
             evidence: s.evidence || "",
-          }))
-        );
+            paper_ids: s.paper_ids || [],
+          };
+          // Refine mode: carry over paper_ids from matching old sections by title
+          if (existingOutline) {
+            const match = existingOutline.find(
+              (old) => old.title.toLowerCase() === newSection.title.toLowerCase()
+            );
+            if (match) {
+              newSection.id = match.id;
+              // If AI returned paper_ids, use those; otherwise carry over old ones
+              if (!newSection.paper_ids?.length && match.paper_ids?.length) {
+                newSection.paper_ids = match.paper_ids;
+              }
+            }
+          }
+          return newSection;
+        });
+        handleOutlineGenerated(newSections);
       } else {
         setOutlineError("AI returned an empty or unparseable outline. Check that the AI provider is working.");
       }
@@ -300,12 +348,25 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
     [essay, editorInstance, scheduleSave]
   );
 
-  const handleTextbookUploaded = useCallback(
-    (textbook: Textbook) => {
-      setTextbooks((prev) => [...prev, textbook]);
+  const handleTextbookFileSelected = useCallback(
+    (file: File) => {
+      const toastId = `upload-${Date.now()}`;
+      setUploadToasts((prev) => [...prev, { id: toastId, filename: file.name, status: "uploading" }]);
+      uploadTextbook(file)
+        .then((textbook) => {
+          setTextbooks((prev) => [...prev, textbook]);
+          setUploadToasts((prev) => prev.map((t) => t.id === toastId ? { ...t, status: "success" } : t));
+        })
+        .catch((e) => {
+          setUploadToasts((prev) => prev.map((t) => t.id === toastId ? { ...t, status: "error", error: e instanceof Error ? e.message : "Upload failed" } : t));
+        });
     },
     []
   );
+
+  const dismissUploadToast = useCallback((id: string) => {
+    setUploadToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
 
   const handleEvidenceExtracted = useCallback(
     (items: EvidenceItem[]) => {
@@ -338,6 +399,65 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
       } catch {}
     },
     [essay]
+  );
+
+  const handleAssignPaper = useCallback(
+    (sectionId: string, paperId: string) => {
+      if (!essay) return;
+      const sections = essay.outline.map((s) =>
+        s.id === sectionId
+          ? { ...s, paper_ids: [...(s.paper_ids || []), paperId] }
+          : s
+      );
+      setEssay((prev) => (prev ? { ...prev, outline: sections } : prev));
+      saveNow({ outline: sections });
+      // Auto-link paper to essay if not already linked
+      const paper = savedPapers.find((p) => p.paper_id === paperId);
+      if (paper && essay.id && !paper.essay_ids?.includes(essay.id)) {
+        linkPaperToEssay(paperId, essay.id).catch(() => {});
+      }
+    },
+    [essay, saveNow, savedPapers]
+  );
+
+  const handleUnassignPaper = useCallback(
+    (sectionId: string, paperId: string) => {
+      if (!essay) return;
+      const sections = essay.outline.map((s) =>
+        s.id === sectionId
+          ? { ...s, paper_ids: (s.paper_ids || []).filter((id) => id !== paperId) }
+          : s
+      );
+      setEssay((prev) => (prev ? { ...prev, outline: sections } : prev));
+      saveNow({ outline: sections });
+    },
+    [essay, saveNow]
+  );
+
+  const handleResearchPaperSaved = useCallback(
+    (paper: SavedPaper) => {
+      setSavedPapers((prev) => [paper, ...prev.filter((p) => p.paper_id !== paper.paper_id)]);
+    },
+    []
+  );
+
+  const handleResearchPaperDeleted = useCallback(
+    (paperId: string) => {
+      setSavedPapers((prev) => prev.filter((p) => p.paper_id !== paperId));
+      // Prune from all outline sections
+      if (!essay) return;
+      let pruned = false;
+      const sections = essay.outline.map((s) => {
+        if (!s.paper_ids?.includes(paperId)) return s;
+        pruned = true;
+        return { ...s, paper_ids: s.paper_ids.filter((id) => id !== paperId) };
+      });
+      if (pruned) {
+        setEssay((prev) => (prev ? { ...prev, outline: sections } : prev));
+        saveNow({ outline: sections });
+      }
+    },
+    [essay, saveNow]
   );
 
   const handleDeleteEvidence = useCallback(
@@ -373,11 +493,58 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
       });
       setDetectionResult(result);
     } catch (e) {
+      setDetectionResult(null);
       setDetectionError(e instanceof Error ? e.message : "Detection failed");
     } finally {
       setDetectionLoading(false);
     }
   }, [essay]);
+
+  const handleBubbleRephrase = useCallback(
+    async (text: string): Promise<string> => {
+      if (!essay?.profile_id) throw new Error("No profile set");
+      const res = await rephraseText(text, essay.profile_id, essay.citation_style);
+      return res.text;
+    },
+    [essay]
+  );
+
+  const handleBubbleHumanize = useCallback(
+    async (text: string): Promise<string> => {
+      if (!essay?.profile_id) throw new Error("No profile set");
+      const res = await humanizeText(text, essay.profile_id);
+      return res.text;
+    },
+    [essay]
+  );
+
+  const handleBubbleScore = useCallback(
+    async (text: string): Promise<{ score: number | null; feedback: string }> => {
+      if (!essay?.profile_id) throw new Error("No profile set");
+      const res = await getStyleScore(text, essay.profile_id);
+      return { score: res.score, feedback: res.feedback };
+    },
+    [essay]
+  );
+
+  const handleBubbleCustomAction = useCallback(
+    async (text: string, actionId: string): Promise<string> => {
+      if (!essay?.profile_id) throw new Error("No profile set");
+      const action = customActions.find((a) => a.id === actionId);
+      if (!action) throw new Error("Action not found");
+      const res = await rewriteText(text, essay.profile_id, action.instructions, essay.citation_style);
+      return res.text;
+    },
+    [essay, customActions]
+  );
+
+  const handleBubbleAskZora = useCallback(
+    (text: string) => {
+      setAiOpen(true);
+      setZoraPrefill(text);
+    },
+    []
+  );
 
   const handleFixFlag = useCallback(
     async (excerpt: string): Promise<string> => {
@@ -523,6 +690,10 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
           outlineError={outlineError}
           startersOpen={startersOpen}
           onStartersToggle={() => setStartersOpen(!startersOpen)}
+          onOpenSources={() => setSourcesOpen(true)}
+          savedPapers={savedPapers}
+          onAssignPaper={handleAssignPaper}
+          onUnassignPaper={handleUnassignPaper}
         />
 
         {/* Starters panel */}
@@ -556,6 +727,13 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
                 onUpdate={handleContentUpdate}
                 onEditorReady={setEditorInstance}
                 onScrollContainerReady={setScrollContainer}
+                profileId={essay.profile_id}
+                onBubbleRephrase={handleBubbleRephrase}
+                onBubbleHumanize={handleBubbleHumanize}
+                onBubbleScore={handleBubbleScore}
+                onBubbleAskZora={handleBubbleAskZora}
+                customActions={customActions}
+                onBubbleCustomAction={handleBubbleCustomAction}
               />
             )}
           </div>
@@ -591,6 +769,13 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
             onFixFlag={handleFixFlag}
             onApplyChatEdit={handleApplyChatEdit}
             onFullEssayGenerated={handleFullEssayGenerated}
+            initialChatMessage={zoraPrefill}
+            onChatMessageConsumed={() => setZoraPrefill("")}
+            customActions={customActions}
+            onAddCustomAction={addCustomAction}
+            onUpdateCustomAction={updateCustomAction}
+            onDeleteCustomAction={deleteCustomAction}
+            onCustomActionGenerate={handleBubbleCustomAction}
           />
         )}
 
@@ -616,6 +801,8 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
           essayId={essay?.id || null}
           citationStyle={essay?.citation_style}
           onInsertCitation={handleTextGenerated}
+          onPaperSaved={handleResearchPaperSaved}
+          onPaperDeleted={handleResearchPaperDeleted}
         />
       </div>
 
@@ -647,7 +834,7 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
       <TextbookUploadModal
         open={textbookUploadOpen}
         onClose={() => setTextbookUploadOpen(false)}
-        onUploaded={handleTextbookUploaded}
+        onFileSelected={handleTextbookFileSelected}
       />
       {essay && (
         <ExtractionModal
@@ -662,6 +849,7 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
           onExtracted={handleEvidenceExtracted}
         />
       )}
+      <UploadToast items={uploadToasts} onDismiss={dismissUploadToast} />
     </div>
   );
 }

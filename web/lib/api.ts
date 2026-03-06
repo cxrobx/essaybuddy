@@ -132,6 +132,7 @@ export async function generateOutline(
   citationStyle?: string,
   instructions?: string,
   targetWordCount?: number | null,
+  essayId?: string,
 ): Promise<AIOutlineResult> {
   const res = await fetch(`${BASE}/ai/generate-outline`, {
     method: "POST",
@@ -143,6 +144,7 @@ export async function generateOutline(
       citation_style: citationStyle,
       instructions: instructions || undefined,
       target_word_count: targetWordCount || undefined,
+      essay_id: essayId || undefined,
     }),
   });
   if (!res.ok) throw new Error("Failed to generate outline");
@@ -158,6 +160,7 @@ export async function expandSection(
   evidenceItems?: EvidenceItem[],
   instructions?: string,
   targetWordCount?: number | null,
+  paperIds?: string[],
 ): Promise<AITextResult> {
   const body: Record<string, unknown> = {
     essay_id: essayId,
@@ -170,6 +173,9 @@ export async function expandSection(
   };
   if (evidenceItems && evidenceItems.length > 0) {
     body.evidence_items = evidenceItems.map((e) => ({ quote: e.quote, page_number: e.page_number, textbook_title: e.textbook_title, context: e.context }));
+  }
+  if (paperIds && paperIds.length > 0) {
+    body.paper_ids = paperIds;
   }
   const res = await fetch(`${BASE}/ai/expand-section`, {
     method: "POST",
@@ -203,7 +209,7 @@ export async function humanizeText(text: string, profileId: string): Promise<AIT
 export async function generateSentenceStarters(params: {
   essayId: string;
   profileId: string;
-  sections: { title: string; notes: string; evidence_items: { quote: string; page_number: number; textbook_title: string }[] }[];
+  sections: { title: string; notes: string; evidence_items: { quote: string; page_number: number; textbook_title: string }[]; paper_ids?: string[] }[];
   topic?: string;
   thesis?: string;
   citationStyle?: string;
@@ -251,6 +257,18 @@ export async function generateFullEssay(
   return res.json();
 }
 
+export async function rewriteText(
+  text: string, profileId: string, instructions: string, citationStyle?: string
+): Promise<AITextResult> {
+  const res = await fetch(`${BASE}/ai/rewrite`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, profile_id: profileId, instructions, citation_style: citationStyle }),
+  });
+  if (!res.ok) throw new Error("Failed to rewrite");
+  return res.json();
+}
+
 export async function getStyleScore(text: string, profileId: string): Promise<AIScoreResult> {
   const res = await fetch(`${BASE}/ai/style-score`, {
     method: "POST",
@@ -278,7 +296,8 @@ export async function setAIProvider(provider: string): Promise<{ provider: strin
 }
 
 export async function detectAIPatterns(request: AIDetectionRequest): Promise<AIDetectionResult> {
-  const res = await fetch(`${BASE}/ai/detect-patterns`, {
+  // Proxy through Next.js to avoid browser timeout on long-running cross-origin requests
+  const res = await fetch("/api/detect", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request),
@@ -447,6 +466,19 @@ export async function unlinkPaperFromEssay(paperId: string, essayId: string): Pr
   });
   if (!res.ok) throw new Error("Failed to unlink paper");
   return res.json();
+}
+
+export async function downloadPaperPdf(paperId: string): Promise<SavedPaper> {
+  const res = await fetch(`${BASE}/research/saved/${paperId}/download-pdf`, { method: "POST" });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Download failed" }));
+    throw new Error(err.detail || "Failed to download PDF");
+  }
+  return res.json();
+}
+
+export function getLocalPdfUrl(paperId: string): string {
+  return `${BASE}/research/saved/${paperId}/pdf`;
 }
 
 export async function getCitation(paperId: string, style: string): Promise<FormattedCitation> {

@@ -24,13 +24,13 @@ Run Codex headless to score AI-likeness risk in essay text and return determinis
 - If Codex returns fenced markdown or prose, normalize and validate before returning.
 
 4. Interpret risk.
-- `risk_score` 0-34 => `low`
-- `risk_score` 35-69 => `medium`
-- `risk_score` 70-100 => `high`
+- `risk_score` 0-29 => `low`
+- `risk_score` 30-59 => `medium`
+- `risk_score` 60-100 => `high`
 - `verdict` thresholds:
-  - 0-39 => `likely_human`
-  - 40-69 => `mixed`
-  - 70-100 => `likely_ai`
+  - 0-29 => `likely_human`
+  - 30-59 => `mixed`
+  - 60-100 => `likely_ai`
 
 5. Apply mitigations.
 - Use `flags` and `suggestions` to target edits in high-risk spans.
@@ -42,10 +42,12 @@ Always return this shape:
 - `risk_score` (0-100 integer)
 - `risk_level` (`low|medium|high`)
 - `verdict` (`likely_human|mixed|likely_ai`)
-- `confidence` (0-100 integer)
+- `confidence` (null in CLI output; computed by the API based on text length, flag coverage, and profile context)
 - `flags[]` with spans and reasons
 - `evidence_summary` (short paragraph)
 - `suggestions[]` (actionable rewrite guidance)
+- `profile_context_provided` (boolean, whether author profile was provided for analysis)
+- `degraded` (boolean, whether fallback values were used due to parse issues)
 
 Read detailed rubric and schema before modifying behavior:
 - [Rubric](references/rubric.md)

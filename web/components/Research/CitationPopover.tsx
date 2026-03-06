@@ -44,7 +44,7 @@ export default function CitationPopover({
   };
 
   return (
-    <div className="absolute right-0 top-full mt-1 z-50 w-72 rounded-lg border border-macos-border bg-macos-surface shadow-lg p-3 space-y-2">
+    <div className="rounded-lg border border-macos-border bg-macos-surface shadow-lg p-3 space-y-2">
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-semibold text-macos-text">Citation</span>
         <button onClick={onClose} className="text-macos-text-secondary hover:text-macos-text text-sm">&times;</button>

@@ -38,12 +38,7 @@ def detect_ai_patterns(
     if profile_metrics:
         cmd.extend(["--profile-json", json.dumps(profile_metrics, ensure_ascii=False)])
 
-    env = {
-        "PATH": os.environ.get("PATH", ""),
-        "HOME": os.environ.get("HOME", ""),
-        "CODEX_TOKEN": os.environ.get("CODEX_TOKEN", ""),
-        "OPENAI_API_KEY": os.environ.get("OPENAI_API_KEY", ""),
-    }
+    env = os.environ.copy()
 
     try:
         proc = subprocess.run(

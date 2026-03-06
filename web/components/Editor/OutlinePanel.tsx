@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import type { OutlineSection, EvidenceItem } from "@/lib/types";
+import type { OutlineSection, EvidenceItem, SavedPaper } from "@/lib/types";
 import { uploadOutline } from "@/lib/api";
 import EvidenceCard from "@/components/Evidence/EvidenceCard";
 import Modal from "@/components/ui/Modal";
+import { useResizablePanel } from "@/lib/useResizablePanel";
 
 export default function OutlinePanel({
   sections,
@@ -21,6 +22,10 @@ export default function OutlinePanel({
   outlineError,
   startersOpen,
   onStartersToggle,
+  onOpenSources,
+  savedPapers,
+  onAssignPaper,
+  onUnassignPaper,
 }: {
   sections: OutlineSection[];
   onUpdate: (sections: OutlineSection[]) => void;
@@ -36,15 +41,22 @@ export default function OutlinePanel({
   outlineError?: string;
   startersOpen?: boolean;
   onStartersToggle?: () => void;
+  onOpenSources?: () => void;
+  savedPapers?: SavedPaper[];
+  onAssignPaper?: (sectionId: string, paperId: string) => void;
+  onUnassignPaper?: (sectionId: string, paperId: string) => void;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [assignDropdownId, setAssignDropdownId] = useState<string | null>(null);
+  const [paperDropdownId, setPaperDropdownId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [generateModalOpen, setGenerateModalOpen] = useState(false);
   const [generateMode, setGenerateMode] = useState<"regenerate" | "refine" | "edit">("regenerate");
   const [additionalText, setAdditionalText] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const { width: panelWidth, handleMouseDown } = useResizablePanel(320, "left");
 
   const handleUploadOutline = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -67,6 +79,9 @@ export default function OutlinePanel({
   const addSection = () => {
     const id = Math.random().toString(36).slice(2, 8);
     onUpdate([...sections, { id, title: "New Section", notes: "", evidence: "" }]);
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    });
   };
 
   const removeSection = (id: string) => {
@@ -92,7 +107,7 @@ export default function OutlinePanel({
   };
 
   return (
-    <aside className="w-72 flex-shrink-0 bg-macos-surface border-r border-macos-border flex flex-col overflow-hidden">
+    <aside className="flex-shrink-0 bg-macos-surface border-r border-macos-border flex flex-col overflow-hidden relative" style={{ width: panelWidth }}>
       <div className="flex items-center justify-between px-3 py-2 border-b border-macos-border">
         <span className="text-xs font-semibold uppercase tracking-widest text-macos-text-secondary">
           Outline
@@ -100,10 +115,10 @@ export default function OutlinePanel({
         {onStartersToggle && (
           <button
             onClick={onStartersToggle}
-            className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+            className={`px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors ${
               startersOpen
-                ? "bg-macos-accent/15 text-macos-accent"
-                : "text-macos-text-secondary hover:text-macos-text hover:bg-macos-elevated"
+                ? "border-macos-accent text-macos-accent"
+                : "border-macos-border text-macos-text-secondary hover:border-macos-accent hover:text-macos-text"
             }`}
           >
             Starters
@@ -111,7 +126,7 @@ export default function OutlinePanel({
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-2 space-y-1">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-2 space-y-1">
         {sections.map((section, index) => (
           <div
             key={section.id}
@@ -156,6 +171,14 @@ export default function OutlinePanel({
                   </span>
                 ) : null;
               })()}
+              {(() => {
+                const pCount = section.paper_ids?.length ?? 0;
+                return pCount > 0 ? (
+                  <span className="w-4 h-4 rounded-full bg-blue-500/20 text-blue-400 text-[9px] font-semibold flex items-center justify-center flex-shrink-0">
+                    {pCount}
+                  </span>
+                ) : null;
+              })()}
               <button
                 onClick={() => removeSection(section.id)}
                 className="text-macos-text-secondary hover:text-macos-error text-xs opacity-0 group-hover:opacity-100"
@@ -166,29 +189,54 @@ export default function OutlinePanel({
             </div>
 
             {!section.collapsed && (
-              <div className="px-3 pb-2 space-y-1">
-                <div className="w-full text-[11px] text-macos-text-secondary rounded p-1.5 border border-macos-border bg-macos-surface">
-                  <textarea
-                    className="w-full bg-transparent resize-none outline-none"
-                    placeholder="Notes..."
-                    rows={2}
-                    value={section.notes}
-                    onChange={(e) =>
-                      updateField(section.id, "notes", e.target.value)
-                    }
-                  />
+              <div className="px-3 pb-2 space-y-2">
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-macos-text-secondary">Notes</span>
+                    <span className="text-[9px] text-macos-text-secondary/60">— what to cover</span>
+                  </div>
+                  <div className="w-full text-[11px] text-macos-text-secondary rounded p-1.5 border border-macos-border bg-macos-surface">
+                    <textarea
+                      className="w-full bg-transparent resize-y outline-none"
+                      placeholder="Key points, arguments, or ideas for this section..."
+                      rows={4}
+                      value={section.notes}
+                      onChange={(e) =>
+                        updateField(section.id, "notes", e.target.value)
+                      }
+                    />
+                  </div>
                 </div>
-                <div className="w-full text-[11px] text-macos-text-secondary italic rounded p-1.5 border border-macos-border bg-macos-surface">
-                  <textarea
-                    className="w-full bg-transparent resize-none outline-none italic"
-                    placeholder="Evidence..."
-                    rows={2}
-                    value={section.evidence}
-                    onChange={(e) =>
-                      updateField(section.id, "evidence", e.target.value)
-                    }
-                  />
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-orange-400/80">Evidence</span>
+                    <span className="flex-1 text-[9px] text-macos-text-secondary/60">— sources &amp; citations</span>
+                    {onOpenSources && (
+                      <button
+                        onClick={onOpenSources}
+                        className="text-macos-text-secondary hover:text-macos-accent transition-colors"
+                        title="Find evidence"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="7" cy="7" r="5" />
+                          <line x1="11" y1="11" x2="14.5" y2="14.5" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                  <div className="w-full text-[11px] text-macos-text-secondary rounded p-1.5 border border-orange-400/30 bg-orange-50/5">
+                    <textarea
+                      className="w-full bg-transparent resize-y outline-none"
+                      placeholder="Quotes, data, or references to support this section..."
+                      rows={4}
+                      value={section.evidence}
+                      onChange={(e) =>
+                        updateField(section.id, "evidence", e.target.value)
+                      }
+                    />
+                  </div>
                 </div>
+                {/* Attached evidence items */}
                 {evidenceItems && evidenceItems.filter((e) => e.section_id === section.id).length > 0 && (
                   <div className="space-y-1">
                     {evidenceItems
@@ -204,37 +252,111 @@ export default function OutlinePanel({
                       ))}
                   </div>
                 )}
-                {onAssignEvidence && evidenceItems && evidenceItems.some((e) => !e.section_id) && (
-                  <div className="relative">
-                    <button
-                      onClick={() => setAssignDropdownId(assignDropdownId === section.id ? null : section.id)}
-                      className="text-[10px] text-macos-text-secondary hover:text-macos-accent transition-colors"
-                    >
-                      + Assign Evidence
-                    </button>
-                    {assignDropdownId === section.id && (
-                      <div className="absolute left-0 top-full mt-1 z-10 w-full max-h-32 overflow-y-auto rounded border border-macos-border bg-macos-elevated shadow-lg">
-                        {evidenceItems
-                          .filter((e) => !e.section_id)
-                          .map((item) => (
-                            <button
-                              key={item.id}
-                              onClick={() => {
-                                onAssignEvidence(item.id, section.id);
-                                setAssignDropdownId(null);
-                              }}
-                              className="w-full text-left px-2 py-1.5 text-[10px] text-macos-text hover:bg-macos-accent/10 border-b border-macos-border last:border-b-0"
-                            >
-                              <span className="italic line-clamp-1">
-                                &ldquo;{item.quote.length > 60 ? item.quote.slice(0, 60) + "..." : item.quote}&rdquo;
-                              </span>
-                              <span className="text-macos-text-secondary ml-1 not-italic">
-                                — {item.textbook_title}
-                              </span>
-                            </button>
-                          ))}
+
+                {/* Evidence actions */}
+                <div className="flex items-center gap-1.5">
+                  {onAssignEvidence && evidenceItems && evidenceItems.some((e) => !e.section_id) && (
+                    <div className="relative">
+                      <button
+                        onClick={() => setAssignDropdownId(assignDropdownId === section.id ? null : section.id)}
+                        className="px-2 py-1 rounded text-[10px] font-medium border border-orange-400/30 text-orange-400/80 hover:bg-orange-400/10 transition-colors"
+                      >
+                        + Attach ({evidenceItems.filter((e) => !e.section_id).length})
+                      </button>
+                      {assignDropdownId === section.id && (
+                        <div className="absolute left-0 top-full mt-1 z-10 w-full max-h-40 overflow-y-auto rounded border border-macos-border bg-macos-elevated shadow-lg">
+                          {evidenceItems
+                            .filter((e) => !e.section_id)
+                            .map((item) => (
+                              <button
+                                key={item.id}
+                                onClick={() => {
+                                  onAssignEvidence(item.id, section.id);
+                                  setAssignDropdownId(null);
+                                }}
+                                className="w-full text-left px-2 py-1.5 text-[10px] text-macos-text hover:bg-macos-accent/10 border-b border-macos-border last:border-b-0"
+                              >
+                                <span className="italic line-clamp-1">
+                                  &ldquo;{item.quote.length > 60 ? item.quote.slice(0, 60) + "..." : item.quote}&rdquo;
+                                </span>
+                                <span className="text-macos-text-secondary ml-1 not-italic">
+                                  — {item.textbook_title}
+                                </span>
+                              </button>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {/* Paper attach dropdown */}
+                  {onAssignPaper && savedPapers && (() => {
+                    const attachedIds = new Set(section.paper_ids || []);
+                    const available = savedPapers.filter((p) => !attachedIds.has(p.paper_id));
+                    return available.length > 0 ? (
+                      <div className="relative">
+                        <button
+                          onClick={() => setPaperDropdownId(paperDropdownId === section.id ? null : section.id)}
+                          className="px-2 py-1 rounded text-[10px] font-medium border border-blue-400/30 text-blue-400/80 hover:bg-blue-400/10 transition-colors"
+                        >
+                          + Paper ({available.length})
+                        </button>
+                        {paperDropdownId === section.id && (
+                          <div className="absolute left-0 top-full mt-1 z-10 w-56 max-h-40 overflow-y-auto rounded border border-macos-border bg-macos-elevated shadow-lg">
+                            {available.map((paper) => (
+                              <button
+                                key={paper.paper_id}
+                                onClick={() => {
+                                  onAssignPaper(section.id, paper.paper_id);
+                                  setPaperDropdownId(null);
+                                }}
+                                className="w-full text-left px-2 py-1.5 text-[10px] text-macos-text hover:bg-blue-400/10 border-b border-macos-border last:border-b-0"
+                              >
+                                <span className="line-clamp-1 font-medium">
+                                  {paper.title.length > 60 ? paper.title.slice(0, 60) + "..." : paper.title}
+                                </span>
+                                {paper.year && (
+                                  <span className="text-macos-text-secondary ml-1">({paper.year})</span>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    )}
+                    ) : null;
+                  })()}
+                </div>
+
+                {/* Attached research papers */}
+                {section.paper_ids && section.paper_ids.length > 0 && savedPapers && (
+                  <div className="space-y-1">
+                    {section.paper_ids.map((pid) => {
+                      const paper = savedPapers.find((p) => p.paper_id === pid);
+                      if (!paper) return null;
+                      return (
+                        <div
+                          key={pid}
+                          className="flex items-center gap-1.5 px-2 py-1 rounded border border-blue-400/30 bg-blue-500/5 text-[10px]"
+                        >
+                          <span className="flex-1 text-macos-text truncate">
+                            {paper.title}
+                          </span>
+                          {paper.year && (
+                            <span className="text-macos-text-secondary flex-shrink-0">
+                              {paper.year}
+                            </span>
+                          )}
+                          {onUnassignPaper && (
+                            <button
+                              onClick={() => onUnassignPaper(section.id, pid)}
+                              className="text-macos-text-secondary hover:text-macos-error flex-shrink-0"
+                              title="Remove paper"
+                            >
+                              &times;
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -385,6 +507,10 @@ export default function OutlinePanel({
           )}
         </span>
       </div>
+      <div
+        onMouseDown={handleMouseDown}
+        className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize hover:bg-macos-accent/20 transition-colors"
+      />
     </aside>
   );
 }

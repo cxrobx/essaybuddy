@@ -1,15 +1,19 @@
 """Research paper search, save, and citation endpoints."""
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from services.sandbox import data_root, atomic_write
 from services.research_client import get_research_client
 from services.citation_formatter import format_citation
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/research", tags=["research"])
 
@@ -125,7 +129,55 @@ async def delete_saved_paper(paper_id: str):
     if not path.exists():
         raise HTTPException(status_code=404, detail="Saved paper not found")
     path.unlink()
+    # Clean up local PDF if it exists
+    pdf_path = _papers_dir() / f"{paper_id}.pdf"
+    if pdf_path.exists():
+        pdf_path.unlink()
     return {"deleted": True}
+
+
+@router.post("/saved/{paper_id}/download-pdf")
+async def download_paper_pdf(paper_id: str):
+    """Download the paper's PDF to local storage."""
+    import httpx
+
+    data = _load_saved_paper(paper_id)
+    pdf_url = data.get("pdf_url")
+    if not pdf_url:
+        raise HTTPException(status_code=400, detail="No PDF URL available for this paper")
+
+    pdf_path = _papers_dir() / f"{paper_id}.pdf"
+    if pdf_path.exists():
+        data["has_local_pdf"] = True
+        _save_paper_file(paper_id, data)
+        return data
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+            resp = await client.get(pdf_url)
+            resp.raise_for_status()
+            content_type = resp.headers.get("content-type", "")
+            # Accept if content-type says PDF, URL ends in .pdf, or response starts with PDF magic bytes
+            is_pdf = "pdf" in content_type or pdf_url.rstrip("/").endswith(".pdf") or resp.content[:5] == b"%PDF-"
+            if not is_pdf:
+                raise HTTPException(status_code=502, detail="Remote URL did not return a PDF")
+            pdf_path.write_bytes(resp.content)
+    except httpx.HTTPError as e:
+        log.warning("PDF download failed for %s: %s", paper_id, e)
+        raise HTTPException(status_code=502, detail=f"Failed to download PDF: {str(e)}")
+
+    data["has_local_pdf"] = True
+    _save_paper_file(paper_id, data)
+    return data
+
+
+@router.get("/saved/{paper_id}/pdf")
+async def serve_paper_pdf(paper_id: str):
+    """Serve a locally downloaded PDF."""
+    pdf_path = _papers_dir() / f"{paper_id}.pdf"
+    if not pdf_path.exists():
+        raise HTTPException(status_code=404, detail="PDF not downloaded yet")
+    return FileResponse(pdf_path, media_type="application/pdf", filename=f"{paper_id}.pdf")
 
 
 @router.put("/saved/{paper_id}/link")

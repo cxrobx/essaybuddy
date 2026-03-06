@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from "react";
 import type { OutlineSection, EvidenceItem, SentenceStarterSection } from "@/lib/types";
 import { generateSentenceStarters } from "@/lib/api";
+import { useResizablePanel } from "@/lib/useResizablePanel";
 
 export default function StartersPanel({
   open,
@@ -33,6 +34,7 @@ export default function StartersPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const { width: panelWidth, handleMouseDown } = useResizablePanel(288, "left");
 
   if (!open) return null;
 
@@ -55,6 +57,7 @@ export default function StartersPanel({
           title: sec.title,
           notes: sec.notes || "",
           evidence_items: sectionEvidence,
+          paper_ids: sec.paper_ids || [],
         };
       });
       const result = await generateSentenceStarters({
@@ -81,7 +84,7 @@ export default function StartersPanel({
   };
 
   return (
-    <div className="w-72 flex-shrink-0 bg-macos-surface border-r border-macos-border flex flex-col overflow-hidden">
+    <div className="flex-shrink-0 bg-macos-surface border-r border-macos-border flex flex-col overflow-hidden relative" style={{ width: panelWidth }}>
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-macos-border">
         <span className="text-[10px] font-semibold uppercase tracking-widest text-macos-text-secondary">
@@ -160,6 +163,10 @@ export default function StartersPanel({
           </div>
         ))}
       </div>
+      <div
+        onMouseDown={handleMouseDown}
+        className="absolute top-0 right-0 w-1.5 h-full cursor-col-resize hover:bg-macos-accent/20 transition-colors"
+      />
     </div>
   );
 }

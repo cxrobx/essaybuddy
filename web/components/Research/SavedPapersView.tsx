@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import type { SavedPaper } from "@/lib/types";
 import PaperCard from "./PaperCard";
 
@@ -11,11 +11,13 @@ export default function SavedPapersView({
   essayId,
   onRemove,
   onCite,
+  onPaperUpdate,
 }: {
   papers: SavedPaper[];
   essayId?: string;
   onRemove?: (paperId: string) => void;
   onCite?: (paperId: string) => void;
+  onPaperUpdate?: (paper: SavedPaper) => void;
 }) {
   const [filter, setFilter] = useState<FilterTab>("all");
 
@@ -69,6 +71,7 @@ export default function SavedPapersView({
               compact
               onRemove={onRemove}
               onCite={onCite}
+              onPaperUpdate={onPaperUpdate}
             />
           ))
         )}

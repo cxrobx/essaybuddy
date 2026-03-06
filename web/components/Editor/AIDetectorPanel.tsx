@@ -130,6 +130,7 @@ export default function AIDetectorPanel({
   result,
   loading,
   error,
+  elapsed,
   onRunCheck,
   onFixFlag,
   hasProfile,
@@ -137,10 +138,12 @@ export default function AIDetectorPanel({
   result: AIDetectionResult | null;
   loading: boolean;
   error: string;
+  elapsed: number;
   onRunCheck: () => void;
   onFixFlag: (excerpt: string) => Promise<string>;
   hasProfile: boolean;
 }) {
+
   return (
     <div className="flex-1 bg-macos-surface flex flex-col overflow-hidden p-3">
       {/* Run button + gauge row */}
@@ -152,11 +155,47 @@ export default function AIDetectorPanel({
         >
           {loading ? "Checking..." : "Run Check"}
         </button>
-        {result && (
+        {loading && (
+          <div className="flex items-center gap-2">
+            <svg className="animate-spin h-4 w-4 text-macos-accent" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25" />
+              <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="opacity-75" />
+            </svg>
+            <div className="flex flex-col">
+              <span className="text-[11px] text-macos-text-secondary">
+                Analyzing patterns... {elapsed}s
+              </span>
+              <span className="text-[10px] text-macos-text-secondary/60">
+                Usually takes 60–90 seconds
+              </span>
+            </div>
+          </div>
+        )}
+        {!loading && result && (
           <div className="flex items-center gap-2">
             <RiskGauge score={result.risk_score} level={result.risk_level} />
-            <div className="text-[11px] font-medium text-macos-text-secondary uppercase">
-              {result.risk_level} Risk
+            <div className="flex flex-col">
+              <div className="text-[11px] font-medium text-macos-text-secondary uppercase">
+                {result.risk_level} Risk
+              </div>
+              <div className={`text-[11px] font-semibold ${
+                result.verdict === "likely_human"
+                  ? "text-green-500"
+                  : result.verdict === "mixed"
+                    ? "text-yellow-500"
+                    : "text-red-500"
+              }`}>
+                {result.verdict === "likely_human"
+                  ? "Likely Human"
+                  : result.verdict === "mixed"
+                    ? "Review Suggested"
+                    : "Likely AI-Generated"}
+              </div>
+              <div className="text-[10px] text-macos-text-secondary">
+                {result.confidence}% evidence strength{result.confidence < 40 && (
+                  <span className="text-macos-text-secondary/60"> (limited signal)</span>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -171,10 +210,22 @@ export default function AIDetectorPanel({
       {/* Scrollable flags + suggestions */}
       {result && (
         <div className="flex-1 overflow-y-auto space-y-2 min-h-0">
+          {result.degraded && (
+            <div className="p-2 rounded bg-yellow-700/15 border border-yellow-600/30 text-[11px] text-yellow-500">
+              Detection returned partial results — scores may be unreliable. Try running again.
+            </div>
+          )}
+
+          {result.profile_context_provided && result.risk_level === "low" && (
+            <div className="text-[11px] text-green-500/80">
+              Your writing profile was used in this analysis
+            </div>
+          )}
+
           {result.flags.length > 0 && (
             <div className="space-y-1.5">
               <div className="text-[10px] uppercase tracking-widest text-macos-text-secondary">
-                Flags ({result.flags.length})
+                Flags: {result.flags.filter(f => f.severity === "high").length} high, {result.flags.filter(f => f.severity === "medium").length} medium, {result.flags.filter(f => f.severity === "low").length} low
               </div>
               {result.flags.map((flag) => (
                 <FlagCard

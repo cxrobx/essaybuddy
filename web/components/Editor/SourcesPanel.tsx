@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from "react";
 import type { Textbook, EvidenceItem, OutlineSection } from "@/lib/types";
 import { deleteTextbook, updateTextbookTitle } from "@/lib/api";
 import EvidenceCard from "@/components/Evidence/EvidenceCard";
+import { useResizablePanel } from "@/lib/useResizablePanel";
 
 type Tab = "textbooks" | "evidence";
 type FilterTab = "all" | "unassigned" | "assigned";
@@ -38,6 +39,7 @@ export default function SourcesPanel({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [error, setError] = useState("");
+  const { width: panelWidth, handleMouseDown } = useResizablePanel(320, "right");
 
   if (!open) return null;
 
@@ -85,7 +87,7 @@ export default function SourcesPanel({
   ];
 
   return (
-    <div className="w-80 flex-shrink-0 bg-macos-surface border-l border-macos-border flex flex-col overflow-hidden">
+    <div className="flex-shrink-0 bg-macos-surface border-l border-macos-border flex flex-col overflow-hidden relative" style={{ width: panelWidth }}>
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-macos-border">
         <span className="text-xs font-semibold uppercase tracking-widest text-macos-accent">
@@ -249,6 +251,10 @@ export default function SourcesPanel({
           {error}
         </div>
       )}
+      <div
+        onMouseDown={handleMouseDown}
+        className="absolute top-0 left-0 w-1.5 h-full cursor-col-resize hover:bg-macos-accent/20 transition-colors"
+      />
     </div>
   );
 }

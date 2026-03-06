@@ -8,6 +8,8 @@ import TextAlign from "@tiptap/extension-text-align";
 import Highlight from "@tiptap/extension-highlight";
 import { Markdown } from "tiptap-markdown";
 import { PageBreaks } from "./extensions/PageBreaks";
+import SelectionBubbleMenu from "./SelectionBubbleMenu";
+import type { CustomAction } from "@/lib/types";
 import { useEffect, useCallback, useRef } from "react";
 
 export default function RichTextEditor({
@@ -15,11 +17,25 @@ export default function RichTextEditor({
   onUpdate,
   onEditorReady,
   onScrollContainerReady,
+  profileId,
+  onBubbleRephrase,
+  onBubbleHumanize,
+  onBubbleScore,
+  onBubbleAskZora,
+  customActions = [],
+  onBubbleCustomAction,
 }: {
   content: string;
   onUpdate: (markdown: string) => void;
   onEditorReady?: (editor: ReturnType<typeof useEditor>) => void;
   onScrollContainerReady?: (el: HTMLDivElement) => void;
+  profileId?: string | null;
+  onBubbleRephrase?: (text: string) => Promise<string>;
+  onBubbleHumanize?: (text: string) => Promise<string>;
+  onBubbleScore?: (text: string) => Promise<{ score: number | null; feedback: string }>;
+  onBubbleAskZora?: (text: string) => void;
+  customActions?: CustomAction[];
+  onBubbleCustomAction?: (text: string, actionId: string) => Promise<string>;
 }) {
   const editor = useEditor({
     extensions: [
@@ -73,11 +89,25 @@ export default function RichTextEditor({
     [onScrollContainerReady]
   );
 
+  const hasBubbleMenu = editor && onBubbleRephrase && onBubbleHumanize && onBubbleScore && onBubbleAskZora;
+
   return (
     <div ref={scrollRef} className="h-full overflow-y-auto">
       <div className="flex justify-center py-6 px-4">
         <div className="w-full max-w-4xl bg-white rounded-lg shadow-macos-lg">
           <EditorContent editor={editor} />
+          {hasBubbleMenu && (
+            <SelectionBubbleMenu
+              editor={editor}
+              profileId={profileId ?? null}
+              onRephrase={onBubbleRephrase}
+              onHumanize={onBubbleHumanize}
+              onScore={onBubbleScore}
+              onAskZora={onBubbleAskZora}
+              customActions={customActions}
+              onCustomAction={onBubbleCustomAction}
+            />
+          )}
         </div>
       </div>
     </div>

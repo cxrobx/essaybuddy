@@ -55,17 +55,17 @@ def _load_profile_json(value: Optional[str]) -> Optional[Dict[str, Any]]:
 
 
 def _score_to_level(score: int) -> str:
-    if score >= 70:
+    if score >= 60:
         return "high"
-    if score >= 35:
+    if score >= 30:
         return "medium"
     return "low"
 
 
 def _score_to_verdict(score: int) -> str:
-    if score >= 70:
+    if score >= 60:
         return "likely_ai"
-    if score >= 40:
+    if score >= 30:
         return "mixed"
     return "likely_human"
 
@@ -115,9 +115,9 @@ def _normalize_flag(raw: Dict[str, Any], text_len: int, idx: int) -> Dict[str, A
     if end < start:
         end = start
 
-    severity = str(raw.get("severity", "medium")).lower()
+    severity = str(raw.get("severity", "low")).lower()
     if severity not in SEVERITY_VALUES:
-        severity = "medium"
+        severity = "low"
 
     excerpt = str(raw.get("excerpt", "")).strip()
     if not excerpt and end > start:
@@ -134,17 +134,19 @@ def _normalize_flag(raw: Dict[str, Any], text_len: int, idx: int) -> Dict[str, A
     }
 
 
-def _validate_and_normalize(result: Dict[str, Any], text_len: int) -> Dict[str, Any]:
-    risk_score = _clamp_int(result.get("risk_score", 50), 0, 100, 50)
-    confidence = _clamp_int(result.get("confidence", 50), 0, 100, 50)
+def _validate_and_normalize(result: Dict[str, Any], text_len: int, had_profile: bool = False) -> Dict[str, Any]:
+    degraded = False
 
-    risk_level = str(result.get("risk_level", _score_to_level(risk_score))).lower()
-    if risk_level not in RISK_LEVEL_VALUES:
-        risk_level = _score_to_level(risk_score)
+    raw_risk = result.get("risk_score")
+    risk_valid = raw_risk is not None and not isinstance(raw_risk, bool) and isinstance(raw_risk, (int, float))
+    if not risk_valid:
+        degraded = True
+    risk_score = _clamp_int(raw_risk if risk_valid else 25, 0, 100, 25)
 
-    verdict = str(result.get("verdict", _score_to_verdict(risk_score))).lower()
-    if verdict not in VERDICT_VALUES:
-        verdict = _score_to_verdict(risk_score)
+    confidence = None  # Computed deterministically by the API
+
+    risk_level = _score_to_level(risk_score)
+    verdict = _score_to_verdict(risk_score)
 
     flags_raw = result.get("flags", [])
     flags: List[Dict[str, Any]] = []
@@ -180,6 +182,8 @@ def _validate_and_normalize(result: Dict[str, Any], text_len: int) -> Dict[str, 
         "flags": flags,
         "evidence_summary": summary,
         "suggestions": suggestions,
+        "profile_context_provided": had_profile,
+        "degraded": degraded,
     }
 
 
@@ -203,7 +207,7 @@ def _build_prompt(text: str, scope: str, profile: Optional[Dict[str, Any]]) -> s
         "risk_score": "integer 0-100",
         "risk_level": "low|medium|high",
         "verdict": "likely_human|mixed|likely_ai",
-        "confidence": "integer 0-100",
+        "confidence": "integer 0-100 (informational, will be recomputed)",
         "flags": [
             {
                 "id": "string",
@@ -219,11 +223,20 @@ def _build_prompt(text: str, scope: str, profile: Optional[Dict[str, Any]]) -> s
         "suggestions": ["string"],
     }
 
-    return (
-        "You are an AI writing-pattern detector. "
+    prompt_parts = [
+        "You are a conservative AI writing-pattern analyst who prioritizes avoiding false positives. "
+        "Most student essays should score between 5 and 25. A score above 40 should be RARE and "
+        "require strong co-occurring evidence across multiple signal categories. "
         "Return ONLY one valid JSON object. No markdown, no prose outside JSON.\n\n"
         "Use this rubric:\n"
         f"{rubric}\n\n"
+        "## Calibration Examples\n"
+        "- Well-written student essay with transitions and structure: score 5-15\n"
+        "- Essay with some formulaic patterns but personal voice: 15-25\n"
+        "- Noticeable AI-like uniformity across multiple paragraphs: 30-45\n"
+        "- Obvious AI markers (banned phrases, zero personal voice): 50-70\n"
+        "- Entirely unedited AI output: 70-100\n"
+        "- When in doubt, score LOWER. A false negative is less harmful than a false positive.\n\n"
         "Analyze the input and produce JSON with EXACT keys shown in this schema contract:\n"
         f"{json.dumps(schema, indent=2)}\n\n"
         "Rules:\n"
@@ -231,19 +244,34 @@ def _build_prompt(text: str, scope: str, profile: Optional[Dict[str, Any]]) -> s
         "2) Use precise flags with char spans based on provided text indices when possible.\n"
         "3) Keep evidence_summary concise (1-3 sentences).\n"
         "4) Provide 2-6 actionable suggestions.\n"
-        "5) Never include extra keys.\n\n"
+        "5) Never include extra keys.\n"
+        "6) NEVER flag normal academic conventions (topic sentences, transitions, concluding summaries).\n"
+        "7) Only flag patterns at ABNORMAL density, not mere presence.\n"
+        "8) If fewer than 3 signal categories show medium+ evidence, risk_score MUST be below 35.\n"
+        "9) If profile_metrics match the text's style, risk_score MUST be below 30 unless meta-AI phrases are detected.\n\n"
+    ]
+
+    if profile:
+        prompt_parts.append(
+            "## Profile-Aware Analysis\n"
+            "The author's measured style metrics are included as `profile_metrics` in the input. "
+            "These represent the author's AUTHENTIC writing patterns. When the text's patterns "
+            "(sentence length, transition word usage, type-token ratio, punctuation patterns) "
+            "match the profile_metrics, those patterns are the author's natural voice — do NOT flag them. "
+            "If profile_metrics closely match the text, reduce the risk_score accordingly. "
+            "Only flag patterns that DEVIATE from the author's profile or that represent meta-AI phrasing.\n\n"
+        )
+
+    prompt_parts.append(
         "Input payload:\n"
         f"{json.dumps(payload, ensure_ascii=False)}"
     )
 
+    return "".join(prompt_parts)
+
 
 def _run_codex(prompt: str, timeout: int) -> str:
-    env = {
-        "PATH": os.environ.get("PATH", ""),
-        "HOME": os.environ.get("HOME", ""),
-        "CODEX_TOKEN": os.environ.get("CODEX_TOKEN", ""),
-        "OPENAI_API_KEY": os.environ.get("OPENAI_API_KEY", ""),
-    }
+    env = os.environ.copy()
     proc = subprocess.run(
         ["codex", "exec", "--full-auto", "--skip-git-repo-check"],
         input=prompt,
@@ -288,15 +316,27 @@ def main() -> int:
         prompt = _build_prompt(text=text, scope=args.scope, profile=profile)
         raw = _run_codex(prompt=prompt, timeout=args.timeout)
         parsed = _extract_json_blob(raw)
-        normalized = _validate_and_normalize(parsed, text_len=len(text))
+        normalized = _validate_and_normalize(parsed, text_len=len(text), had_profile=profile is not None)
         sys.stdout.write(json.dumps(normalized, ensure_ascii=False))
         return 0
     except ValueError as exc:
         sys.stderr.write(f"Invalid input: {exc}\n")
         return EXIT_INVALID_INPUT
     except Exception as exc:
-        sys.stderr.write(f"Detection failed: {exc}\n")
-        return EXIT_RUNTIME_FAILURE
+        # Emit degraded result instead of failing — lets API show partial results
+        degraded_result = {
+            "risk_score": 25,
+            "risk_level": "low",
+            "verdict": "likely_human",
+            "confidence": None,
+            "flags": [],
+            "evidence_summary": f"Detection encountered an issue: {exc}",
+            "suggestions": ["Try running the check again."],
+            "profile_context_provided": False,
+            "degraded": True,
+        }
+        sys.stdout.write(json.dumps(degraded_result, ensure_ascii=False))
+        return 0
 
 
 if __name__ == "__main__":

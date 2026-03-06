@@ -70,6 +70,8 @@ export default function ChatPanel({
   outlineSections,
   essayContent,
   onApplyEdit,
+  initialMessage,
+  onMessageConsumed,
 }: {
   essayId: string | null;
   profileId: string | null;
@@ -78,12 +80,18 @@ export default function ChatPanel({
   outlineSections: OutlineSection[];
   essayContent: string;
   onApplyEdit: (find: string, replace: string) => void;
+  initialMessage?: string;
+  onMessageConsumed?: () => void;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [sessionId, setSessionId] = useState<string | undefined>();
+  const [inputHeight, setInputHeight] = useState(56);
+  const [attachments, setAttachments] = useState<{ id: string; file: File; preview?: string; text?: string }[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const isResizingInput = useRef(false);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -91,8 +99,65 @@ export default function ChatPanel({
     }
   }, [messages]);
 
+  // Pre-fill input when triggered from bubble menu "Ask Zora"
+  useEffect(() => {
+    if (initialMessage) {
+      setInput(`Regarding this text:\n\n"${initialMessage}"\n\n`);
+      onMessageConsumed?.();
+    }
+  }, [initialMessage, onMessageConsumed]);
+
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+
+    files.forEach((file) => {
+      const id = Math.random().toString(36).slice(2, 8);
+      const entry: { id: string; file: File; preview?: string; text?: string } = { id, file };
+
+      if (file.type.startsWith("image/")) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          setAttachments((prev) => prev.map((a) => a.id === id ? { ...a, preview: reader.result as string } : a));
+        };
+        reader.readAsDataURL(file);
+      }
+
+      // Read text content for supported formats
+      if (file.type === "text/plain" || file.name.endsWith(".txt") || file.name.endsWith(".md")) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          setAttachments((prev) => prev.map((a) => a.id === id ? { ...a, text: reader.result as string } : a));
+        };
+        reader.readAsText(file);
+      }
+
+      setAttachments((prev) => [...prev, entry]);
+    });
+  }, []);
+
+  const removeAttachment = useCallback((id: string) => {
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
+  }, []);
+
   const sendMessage = useCallback(async (text: string) => {
-    if (!text || loading) return;
+    if ((!text && attachments.length === 0) || loading) return;
+
+    // Build message with attachment context
+    let fullMessage = text;
+    const fileContexts = attachments
+      .filter((a) => a.text)
+      .map((a) => `[File: ${a.file.name}]\n${a.text}`);
+    const fileRefs = attachments
+      .filter((a) => !a.text)
+      .map((a) => `[Attached: ${a.file.name} (${a.file.type || "unknown type"})]`);
+    if (fileContexts.length > 0 || fileRefs.length > 0) {
+      const attachmentBlock = [...fileContexts, ...fileRefs].join("\n\n");
+      fullMessage = fullMessage
+        ? `${attachmentBlock}\n\n${fullMessage}`
+        : attachmentBlock;
+    }
+    setAttachments([]);
 
     const userMsg: ChatMessage = {
       id: Math.random().toString(36).slice(2, 8),
@@ -111,7 +176,7 @@ export default function ChatPanel({
 
       // First message sends full context; subsequent messages just send the text + session_id
       const res = await chatWithZora({
-        message: text,
+        message: fullMessage,
         session_id: sessionId,
         ...(!sessionId && {
           essay_id: essayId || undefined,
@@ -148,7 +213,7 @@ export default function ChatPanel({
     } finally {
       setLoading(false);
     }
-  }, [loading, sessionId, essayId, profileId, topic, thesis, outlineSections, essayContent]);
+  }, [loading, sessionId, essayId, profileId, topic, thesis, outlineSections, essayContent, attachments]);
 
   const handleSend = useCallback(() => {
     sendMessage(input.trim());
@@ -240,38 +305,109 @@ export default function ChatPanel({
       </div>
 
       {/* Input area */}
-      <div className="border-t border-macos-border p-2">
-        <div className="relative bg-macos-elevated rounded-lg border border-macos-border focus-within:border-macos-accent transition-colors">
+      <div
+        className="border-t border-macos-border cursor-row-resize hover:bg-macos-accent/20 transition-colors flex items-center justify-center"
+        style={{ height: 6 }}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          isResizingInput.current = true;
+          const startY = e.clientY;
+          const startHeight = inputHeight;
+          const onMove = (ev: MouseEvent) => {
+            if (!isResizingInput.current) return;
+            setInputHeight(Math.min(Math.max(startHeight - (ev.clientY - startY), 40), 400));
+          };
+          const onUp = () => {
+            isResizingInput.current = false;
+            document.removeEventListener("mousemove", onMove);
+            document.removeEventListener("mouseup", onUp);
+            document.body.style.cursor = "";
+            document.body.style.userSelect = "";
+          };
+          document.body.style.cursor = "row-resize";
+          document.body.style.userSelect = "none";
+          document.addEventListener("mousemove", onMove);
+          document.addEventListener("mouseup", onUp);
+        }}
+      >
+        <div className="w-8 h-0.5 rounded-full bg-macos-border" />
+      </div>
+      <div className="p-2 space-y-1.5">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,.pdf,.docx,.doc,.txt,.md,.csv"
+          multiple
+          className="sr-only"
+          onChange={handleFileSelect}
+        />
+        {attachments.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {attachments.map((a) => (
+              <div
+                key={a.id}
+                className="flex items-center gap-1.5 bg-macos-elevated border border-macos-border rounded-md px-2 py-1 text-[10px] text-macos-text group"
+              >
+                {a.preview ? (
+                  <img src={a.preview} alt="" className="w-5 h-5 rounded object-cover" />
+                ) : (
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-macos-text-secondary flex-shrink-0">
+                    <path d="M9 1H4a1 1 0 00-1 1v12a1 1 0 001 1h8a1 1 0 001-1V5L9 1z" />
+                    <path d="M9 1v4h4" />
+                  </svg>
+                )}
+                <span className="truncate max-w-[100px]">{a.file.name}</span>
+                <button
+                  onClick={() => removeAttachment(a.id)}
+                  className="text-macos-text-secondary hover:text-macos-error text-xs leading-none opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  &times;
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="bg-macos-elevated rounded-lg border border-macos-border focus-within:border-macos-accent transition-colors">
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Ask Zora to edit your essay..."
-            rows={2}
-            className="w-full bg-transparent text-xs text-macos-text rounded-lg px-3 pt-2 pb-8 resize-none outline-none max-h-32 overflow-y-auto"
-            style={{ minHeight: "56px" }}
+            className="w-full bg-transparent text-xs text-macos-text rounded-lg px-3 py-2 resize-none outline-none overflow-y-auto"
+            style={{ height: inputHeight }}
           />
-          <div className="absolute bottom-1.5 right-1.5">
-            <button
-              onClick={handleSend}
-              disabled={!input.trim() || loading}
-              className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-macos-accent hover:bg-macos-accent-hover disabled:opacity-30 disabled:cursor-not-allowed text-white transition-colors"
-            >
-              Send
-            </button>
-          </div>
         </div>
-      </div>
-      {messages.length > 0 && (
-        <div className="px-2 pb-1 flex justify-end">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="text-macos-text-secondary hover:text-macos-accent transition-colors"
+              title="Attach files"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="8" cy="8" r="7" />
+                <line x1="8" y1="5" x2="8" y2="11" />
+                <line x1="5" y1="8" x2="11" y2="8" />
+              </svg>
+            </button>
+            {messages.length > 0 && (
+              <button
+                onClick={handleClear}
+                className="text-[10px] text-macos-text-secondary hover:text-macos-text transition-colors"
+              >
+                Clear chat
+              </button>
+            )}
+          </div>
           <button
-            onClick={handleClear}
-            className="text-[10px] text-macos-text-secondary hover:text-macos-text transition-colors"
+            onClick={handleSend}
+            disabled={(!input.trim() && attachments.length === 0) || loading}
+            className="px-3 py-1 rounded-md text-[11px] font-medium bg-macos-accent hover:bg-macos-accent-hover disabled:opacity-30 disabled:cursor-not-allowed text-white transition-colors"
           >
-            Clear chat
+            Send
           </button>
         </div>
-      )}
+      </div>
     </div>
   );
 }

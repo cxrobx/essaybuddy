@@ -5,7 +5,7 @@
   "risk_score": 0,
   "risk_level": "low",
   "verdict": "likely_human",
-  "confidence": 0,
+  "confidence": null,
   "flags": [
     {
       "id": "repetition-pattern-1",
@@ -21,14 +21,17 @@
   "suggestions": [
     "Rewrite repeated sentence starts with varied syntax.",
     "Replace abstract claims with concrete examples and entities."
-  ]
+  ],
+  "profile_context_provided": false,
+  "degraded": false
 }
 ```
 
 ## Constraints
 
 - Output must be valid JSON object only.
-- `risk_score` and `confidence` must be integers in `[0, 100]`.
+- `risk_score` must be an integer in `[0, 100]`.
+- `confidence` is `null` in CLI output; computed deterministically by the API.
 - `risk_level` must match score thresholds.
 - `verdict` must match score thresholds.
 - `flags` may be empty.
@@ -36,3 +39,5 @@
   - `start_char >= 0`
   - `end_char >= start_char`
   - `severity` in `low|medium|high`
+- `profile_context_provided` must be a boolean. `true` when author profile metrics were provided for analysis.
+- `degraded` must be a boolean. `true` when fallback values were used due to missing or unparseable fields.

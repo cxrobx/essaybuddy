@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState } from "react";
 
 const FIELDS_OF_STUDY = [
   "Computer Science", "Medicine", "Biology", "Physics", "Chemistry",
@@ -22,40 +22,19 @@ export default function SearchBar({
   const [yearMax, setYearMax] = useState("");
   const [field, setField] = useState("");
   const [showFilters, setShowFilters] = useState(false);
-  const debounceRef = useRef<NodeJS.Timeout>();
 
-  const triggerSearch = useCallback(
-    (q: string, yMin: string, yMax: string, f: string) => {
-      if (!q.trim()) return;
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      debounceRef.current = setTimeout(() => {
-        onSearch(q.trim(), {
-          year_min: yMin ? parseInt(yMin) : undefined,
-          year_max: yMax ? parseInt(yMax) : undefined,
-          fields_of_study: f || undefined,
-        });
-      }, 300);
-    },
-    [onSearch]
-  );
-
-  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
-
-  const handleQueryChange = (val: string) => {
-    setQuery(val);
-    triggerSearch(val, yearMin, yearMax, field);
+  const doSearch = () => {
+    if (!query.trim()) return;
+    onSearch(query.trim(), {
+      year_min: yearMin ? parseInt(yearMin) : undefined,
+      year_max: yearMax ? parseInt(yearMax) : undefined,
+      fields_of_study: field || undefined,
+    });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (query.trim()) {
-      onSearch(query.trim(), {
-        year_min: yearMin ? parseInt(yearMin) : undefined,
-        year_max: yearMax ? parseInt(yearMax) : undefined,
-        fields_of_study: field || undefined,
-      });
-    }
+    doSearch();
   };
 
   return (
@@ -64,10 +43,17 @@ export default function SearchBar({
         <input
           type="text"
           value={query}
-          onChange={(e) => handleQueryChange(e.target.value)}
+          onChange={(e) => setQuery(e.target.value)}
           placeholder="Search papers..."
           className="flex-1 bg-macos-bg text-xs text-macos-text rounded px-2.5 py-1.5 outline-none border border-macos-border focus:border-macos-accent placeholder:text-macos-text-secondary/50"
         />
+        <button
+          type="submit"
+          disabled={loading || !query.trim()}
+          className="px-2.5 py-1.5 rounded text-[11px] bg-macos-accent text-white font-medium transition-opacity disabled:opacity-40"
+        >
+          {loading ? "..." : "Search"}
+        </button>
         <button
           type="button"
           onClick={() => setShowFilters(!showFilters)}
@@ -83,20 +69,20 @@ export default function SearchBar({
           <input
             type="number"
             value={yearMin}
-            onChange={(e) => { setYearMin(e.target.value); triggerSearch(query, e.target.value, yearMax, field); }}
+            onChange={(e) => setYearMin(e.target.value)}
             placeholder="From year"
             className="w-20 bg-macos-bg text-[11px] text-macos-text rounded px-2 py-1 outline-none border border-macos-border focus:border-macos-accent"
           />
           <input
             type="number"
             value={yearMax}
-            onChange={(e) => { setYearMax(e.target.value); triggerSearch(query, yearMin, e.target.value, field); }}
+            onChange={(e) => setYearMax(e.target.value)}
             placeholder="To year"
             className="w-20 bg-macos-bg text-[11px] text-macos-text rounded px-2 py-1 outline-none border border-macos-border focus:border-macos-accent"
           />
           <select
             value={field}
-            onChange={(e) => { setField(e.target.value); triggerSearch(query, yearMin, yearMax, e.target.value); }}
+            onChange={(e) => setField(e.target.value)}
             className="flex-1 min-w-[120px] bg-macos-bg text-[11px] text-macos-text rounded px-2 py-1 outline-none border border-macos-border"
           >
             <option value="">All fields</option>

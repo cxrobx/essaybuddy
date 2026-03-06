@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import type { ResearchPaper } from "@/lib/types";
+import type { ResearchPaper, SavedPaper } from "@/lib/types";
+import { downloadPaperPdf, getLocalPdfUrl } from "@/lib/api";
 
 export default function PaperCard({
   paper,
@@ -10,6 +11,7 @@ export default function PaperCard({
   onSave,
   onRemove,
   onCite,
+  onPaperUpdate,
 }: {
   paper: ResearchPaper;
   saved?: boolean;
@@ -17,8 +19,12 @@ export default function PaperCard({
   onSave?: (paper: ResearchPaper) => void;
   onRemove?: (paperId: string) => void;
   onCite?: (paperId: string) => void;
+  onPaperUpdate?: (paper: SavedPaper) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  const hasLocalPdf = saved && (paper as SavedPaper).has_local_pdf;
 
   const authorStr = paper.authors.length > 3
     ? `${paper.authors.slice(0, 3).map(a => a.name).join(", ")} et al.`
@@ -26,6 +32,38 @@ export default function PaperCard({
 
   const truncate = (text: string, max: number) =>
     text.length <= max ? text : text.slice(0, max) + "...";
+
+  const handleDownloadPdf = async () => {
+    setDownloading(true);
+    try {
+      const updated = await downloadPaperPdf(paper.paper_id);
+      onPaperUpdate?.(updated);
+    } catch {} finally {
+      setDownloading(false);
+    }
+  };
+
+  const pdfButtons = (
+    <>
+      {hasLocalPdf ? (
+        <a href={getLocalPdfUrl(paper.paper_id)} target="_blank" rel="noopener noreferrer" className="text-[10px] text-green-400 hover:underline px-1.5 py-0.5">
+          PDF ✓
+        </a>
+      ) : paper.pdf_url && saved ? (
+        <button
+          onClick={handleDownloadPdf}
+          disabled={downloading}
+          className="text-[10px] text-macos-accent hover:underline px-1.5 py-0.5 disabled:opacity-40"
+        >
+          {downloading ? "Downloading..." : "Download PDF"}
+        </button>
+      ) : paper.pdf_url ? (
+        <a href={paper.pdf_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-macos-accent hover:underline px-1.5 py-0.5">
+          PDF
+        </a>
+      ) : null}
+    </>
+  );
 
   if (compact) {
     return (
@@ -58,11 +96,7 @@ export default function PaperCard({
               Cite
             </button>
           )}
-          {paper.pdf_url && (
-            <a href={paper.pdf_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-macos-accent hover:underline px-1.5 py-0.5">
-              PDF
-            </a>
-          )}
+          {pdfButtons}
         </div>
       </div>
     );
@@ -112,11 +146,7 @@ export default function PaperCard({
             Cite
           </button>
         )}
-        {paper.pdf_url && (
-          <a href={paper.pdf_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-macos-accent hover:underline px-1.5 py-1">
-            View PDF
-          </a>
-        )}
+        {pdfButtons}
         {paper.doi && (
           <a href={`https://doi.org/${paper.doi}`} target="_blank" rel="noopener noreferrer" className="text-[10px] text-macos-text-secondary hover:text-macos-text px-1.5 py-1">
             DOI

@@ -47,6 +47,7 @@ class GenerateOutlineRequest(BaseModel):
     citation_style: Optional[str] = None
     instructions: Optional[str] = None
     target_word_count: Optional[int] = None
+    essay_id: Optional[str] = None
 
 
 class ExpandSectionRequest(BaseModel):
@@ -56,6 +57,7 @@ class ExpandSectionRequest(BaseModel):
     profile_id: str
     citation_style: Optional[str] = None
     evidence_items: Optional[list] = None
+    paper_ids: Optional[list[str]] = None
     instructions: Optional[str] = None
     target_word_count: Optional[int] = None
 
@@ -351,12 +353,39 @@ async def generate_outline(body: GenerateOutlineRequest):
     style_ctx = _build_style_context(profile)
     samples_ctx = _load_sample_excerpts()
 
+    # Load paper catalog if essay_id provided
+    essay_papers: list[dict] = []
+    paper_catalog_block = ""
+    if body.essay_id:
+        essay_papers = _load_linked_research_papers_raw(body.essay_id)
+        if essay_papers:
+            catalog_lines = [
+                "<available-papers>",
+                "Assign relevant paper_ids to each outline section from this list.",
+            ]
+            for p in essay_papers:
+                pid = p.get("paper_id", "")
+                title = p.get("title", "Untitled")
+                summary = p.get("tldr") or (p.get("abstract", "") or "")[:150]
+                catalog_lines.append(f'- "{pid}": "{title}" — {summary}')
+            catalog_lines.append("</available-papers>")
+            paper_catalog_block = "\n".join(catalog_lines)
+
     briefing = _build_essay_briefing(body.topic, body.thesis, body.target_word_count, body.instructions)
     directive = _voice_directive(profile) + _citation_directive(body.citation_style)
+
+    # Build schema instruction — include paper_ids field if papers available
+    schema_fields = """- "title": section heading
+- "notes": brief description of content
+- "evidence": key evidence or examples to include"""
+    if essay_papers:
+        schema_fields += '\n- "paper_ids": array of paper_id strings from available-papers that are relevant to this section (can be empty)'
+
     prompt = f"""{style_ctx}
 
 {samples_ctx}
 {briefing}
+{paper_catalog_block}
 
 Generate a detailed essay outline for the following topic. {directive}
 
@@ -364,9 +393,7 @@ Topic: {body.topic}
 {f"Thesis: {body.thesis}" if body.thesis else ""}
 
 Return a JSON array of sections. Each section should have:
-- "title": section heading
-- "notes": brief description of content
-- "evidence": key evidence or examples to include
+{schema_fields}
 
 Format: [{{"title": "...", "notes": "...", "evidence": "..."}}]
 Return ONLY the JSON array, no other text."""
@@ -376,6 +403,25 @@ Return ONLY the JSON array, no other text."""
         result = await provider.generate(prompt)
         outline = _extract_json_array(result)
         if outline is not None:
+            # Validate paper_ids: strip any IDs not in the real paper set
+            if essay_papers:
+                valid_ids = {p.get("paper_id") for p in essay_papers}
+                any_assigned = False
+                for section in outline:
+                    pids = section.get("paper_ids", [])
+                    if pids:
+                        section["paper_ids"] = [pid for pid in pids if pid in valid_ids]
+                        if section["paper_ids"]:
+                            any_assigned = True
+
+                # Fallback: if AI didn't assign any paper_ids, use heuristic matcher
+                if not any_assigned:
+                    from services.paper_matcher import match_papers_to_sections
+                    matched = match_papers_to_sections(outline, essay_papers)
+                    for section, pids in zip(outline, matched):
+                        if pids:
+                            section["paper_ids"] = pids
+
             return {"outline": outline}
         return {"outline": [], "raw": result}
     except RuntimeError as e:
@@ -425,12 +471,18 @@ async def expand_section(body: ExpandSectionRequest):
         ev_lines.append("</evidence>")
         evidence_ctx = "\n".join(ev_lines)
 
+    # Build research context from section-level paper IDs
+    research_ctx = ""
+    if body.paper_ids:
+        research_ctx = _load_research_papers_by_ids(body.paper_ids)
+
     directive = _voice_directive(profile) + _citation_directive(body.citation_style)
     prompt = f"""{style_ctx}
 
 {samples_ctx}
 {briefing}
 {evidence_ctx}
+{research_ctx}
 {essay_context}
 
 Expand the following essay section into well-written paragraphs. {directive}
@@ -458,7 +510,7 @@ async def sentence_starters(body: SentenceStartersRequest):
     briefing = _build_essay_briefing(body.topic, body.thesis, instructions=body.instructions)
     directive = _voice_directive(profile) + _citation_directive(body.citation_style)
 
-    # Build section listing with evidence
+    # Build section listing with evidence and research papers
     section_lines = []
     for sec in body.sections:
         title = sec.get("title", "Untitled")
@@ -474,6 +526,11 @@ async def sentence_starters(body: SentenceStartersRequest):
                 page = ev.get("page_number", "")
                 tb_title = ev.get("textbook_title", "")
                 section_lines.append(f'  - "{quote}" (p. {page}, {tb_title})')
+        sec_paper_ids = sec.get("paper_ids", [])
+        if sec_paper_ids:
+            sec_research = _load_research_papers_by_ids(sec_paper_ids)
+            if sec_research:
+                section_lines.append(sec_research)
         section_lines.append("")
 
     sections_block = "\n".join(section_lines)
@@ -547,6 +604,43 @@ async def humanize(body: HumanizeRequest):
         raise HTTPException(status_code=502, detail=str(e))
 
 
+class RewriteRequest(BaseModel):
+    text: str
+    profile_id: str
+    instructions: str
+    citation_style: Optional[str] = None
+
+
+@router.post("/rewrite")
+async def rewrite(body: RewriteRequest):
+    profile = _load_profile(body.profile_id)
+    style_ctx = _build_style_context(profile)
+
+    directive = _voice_directive(profile) + _citation_directive(body.citation_style)
+    prompt = f"""{style_ctx}
+
+{directive}
+
+<task-instructions>
+{body.instructions}
+</task-instructions>
+
+Apply the task instructions above to the following text. Preserve the author's voice and style.
+
+Text:
+{body.text}
+
+Return ONLY the rewritten text, no explanations."""
+
+    provider = get_provider()
+    try:
+        result = await provider.generate(prompt)
+        result = await _humanize_pass(result, profile)
+        return {"text": result}
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
 @router.post("/style-score")
 async def style_score(body: StyleScoreRequest):
     profile = _load_profile(body.profile_id)
@@ -579,13 +673,14 @@ Return ONLY the JSON object."""
 
 
 MAX_RESEARCH_PAPERS = 5
+MAX_CATALOG_PAPERS = 15
 
 
-def _load_linked_research_papers(essay_id: str) -> str:
-    """Load research papers linked to this essay as XML context (max 5)."""
+def _load_linked_research_papers_raw(essay_id: str, limit: int = MAX_CATALOG_PAPERS) -> list[dict]:
+    """Load raw paper dicts linked to this essay."""
     papers_dir = data_root() / "research" / "papers"
     if not papers_dir.exists():
-        return ""
+        return []
     papers = []
     for f in papers_dir.glob("*.json"):
         try:
@@ -594,10 +689,58 @@ def _load_linked_research_papers(essay_id: str) -> str:
                 papers.append(p)
         except (json.JSONDecodeError, KeyError):
             continue
+    return papers[:limit]
+
+
+def _format_papers_xml(papers: list[dict], header: str = "Linked Research Papers (cite where relevant)") -> str:
+    """Format a list of paper dicts into XML context."""
     if not papers:
         return ""
-    papers = papers[:MAX_RESEARCH_PAPERS]
-    lines = ["<research-papers>", "## Linked Research Papers (cite where relevant)"]
+    lines = ["<research-papers>", f"## {header}"]
+    for p in papers:
+        lines.append(f"### {p.get('title', 'Untitled')}")
+        authors = p.get("authors", [])
+        if authors:
+            names = [a.get("name", "") for a in authors[:5]]
+            lines.append(f"Authors: {', '.join(names)}")
+        year = p.get("year")
+        if year:
+            lines.append(f"Year: {year}")
+        tldr = p.get("tldr", "") or p.get("abstract", "") or ""
+        if tldr:
+            lines.append(f"Summary: {tldr[:500]}")
+        doi = p.get("doi")
+        if doi:
+            lines.append(f"DOI: {doi}")
+        lines.append("")
+    lines.append("</research-papers>")
+    return "\n".join(lines)
+
+
+def _load_linked_research_papers(essay_id: str) -> str:
+    """Load research papers linked to this essay as XML context (max 5)."""
+    papers = _load_linked_research_papers_raw(essay_id, limit=MAX_RESEARCH_PAPERS)
+    return _format_papers_xml(papers)
+
+
+def _load_research_papers_by_ids(paper_ids: list[str]) -> str:
+    """Load research papers by their IDs as XML context (max MAX_RESEARCH_PAPERS)."""
+    papers_dir = data_root() / "research" / "papers"
+    if not papers_dir.exists():
+        return ""
+    papers = []
+    for pid in paper_ids[:MAX_RESEARCH_PAPERS]:
+        fpath = papers_dir / f"{pid}.json"
+        if not fpath.exists():
+            continue
+        try:
+            p = json.loads(fpath.read_text(encoding="utf-8"))
+            papers.append(p)
+        except (json.JSONDecodeError, KeyError):
+            continue
+    if not papers:
+        return ""
+    lines = ["<research-papers>", "## Section Research Papers (cite where relevant)"]
     for p in papers:
         lines.append(f"### {p.get('title', 'Untitled')}")
         authors = p.get("authors", [])
@@ -684,7 +827,8 @@ async def generate_full_essay(body: GenerateFullEssayRequest):
     profile = _load_profile(body.profile_id)
     style_ctx = _build_style_context(profile)
     samples_ctx = _load_sample_excerpts(per_sample=1500, profile_id=body.profile_id)
-    research_ctx = _load_linked_research_papers(body.essay_id)
+    all_essay_papers = _load_linked_research_papers_raw(body.essay_id)
+    research_ctx = _format_papers_xml(all_essay_papers[:MAX_RESEARCH_PAPERS])
     all_evidence = _load_evidence_for_essay(body.essay_id)
 
     briefing = _build_essay_briefing(topic, thesis, target_word_count, instructions)
@@ -711,6 +855,23 @@ async def generate_full_essay(body: GenerateFullEssayRequest):
         section_evidence = [e for e in all_evidence if e.get("section_id") == section_id]
         evidence_ctx = _build_evidence_context(section_evidence)
 
+        # Section-level research papers augment essay-level papers
+        section_paper_ids = section.get("paper_ids", [])
+        if section_paper_ids:
+            section_research = _load_research_papers_by_ids(section_paper_ids)
+            effective_research = (section_research + "\n" + research_ctx).strip() if section_research else research_ctx
+        elif all_essay_papers:
+            # Auto-match relevant papers for sections without explicit paper_ids
+            from services.paper_matcher import match_papers_to_section
+            matched_ids = match_papers_to_section(section_title, section_notes, all_essay_papers)
+            if matched_ids:
+                section_research = _load_research_papers_by_ids(matched_ids)
+                effective_research = (section_research + "\n" + research_ctx).strip() if section_research else research_ctx
+            else:
+                effective_research = research_ctx
+        else:
+            effective_research = research_ctx
+
         # Rolling window: only last N sections for continuity context
         prev_summary = ""
         recent = generated_sections[-MAX_PREV_SUMMARY_SECTIONS:]
@@ -735,7 +896,7 @@ async def generate_full_essay(body: GenerateFullEssayRequest):
 
 {samples_ctx}
 {briefing}
-{research_ctx}
+{effective_research}
 {evidence_ctx}
 {prev_summary}
 

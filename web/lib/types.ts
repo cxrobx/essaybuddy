@@ -42,6 +42,7 @@ export type OutlineSection = {
   notes: string;
   evidence: string;
   collapsed?: boolean;
+  paper_ids?: string[];
 };
 
 export type Sample = {
@@ -138,6 +139,8 @@ export type AIDetectionResult = {
   provider: "codex";
   created_at: string;
   selection_label?: string;
+  profile_context_provided?: boolean;
+  degraded?: boolean;
 };
 
 export type AIDetectionHistoryItem = {
@@ -211,6 +214,7 @@ export type SavedPaper = ResearchPaper & {
   notes: string | null;
   essay_ids: string[];
   saved_at: string;
+  has_local_pdf?: boolean;
 };
 
 export type ResearchSearchResult = {
@@ -234,6 +238,13 @@ export type SentenceStarterSection = {
 export type SentenceStartersResult = {
   sections: SentenceStarterSection[];
   raw?: string;
+};
+
+// Custom actions
+export type CustomAction = {
+  id: string;
+  name: string;
+  instructions: string;
 };
 
 // Chat types

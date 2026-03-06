@@ -7,6 +7,7 @@ import SearchBar from "@/components/Research/SearchBar";
 import PaperList from "@/components/Research/PaperList";
 import SavedPapersView from "@/components/Research/SavedPapersView";
 import CitationPopover from "@/components/Research/CitationPopover";
+import { useResizablePanel } from "@/lib/useResizablePanel";
 
 type Tab = "search" | "saved";
 
@@ -16,12 +17,16 @@ export default function ResearchPanel({
   essayId,
   citationStyle,
   onInsertCitation,
+  onPaperSaved,
+  onPaperDeleted,
 }: {
   open: boolean;
   onClose: () => void;
   essayId: string | null;
   citationStyle?: CitationStyle;
   onInsertCitation: (text: string) => void;
+  onPaperSaved?: (paper: SavedPaper) => void;
+  onPaperDeleted?: (paperId: string) => void;
 }) {
   const [tab, setTab] = useState<Tab>("search");
   const [results, setResults] = useState<ResearchPaper[]>([]);
@@ -34,6 +39,7 @@ export default function ResearchPanel({
   const [savedPapers, setSavedPapers] = useState<SavedPaper[]>([]);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
   const [citingPaperId, setCitingPaperId] = useState<string | null>(null);
+  const { width: panelWidth, handleMouseDown } = useResizablePanel(320, "right");
 
   // Load saved papers on mount and when tab changes
   useEffect(() => {
@@ -58,7 +64,7 @@ export default function ResearchPanel({
       } catch (e) {
         setResults([]);
         const msg = e instanceof Error ? e.message : "Search failed";
-        setSearchError(msg.includes("429") ? "Rate limited by Semantic Scholar. Wait a moment and try again." : msg);
+        setSearchError(msg.includes("429") ? "Rate limited. Wait a moment and try again." : msg);
       } finally {
         setSearchLoading(false);
       }
@@ -89,15 +95,21 @@ export default function ResearchPanel({
       }
       setSavedPapers((prev) => [saved, ...prev]);
       setSavedIds((prev) => new Set([...prev, saved.paper_id]));
+      onPaperSaved?.(saved);
     } catch {}
-  }, [essayId]);
+  }, [essayId, onPaperSaved]);
 
   const handleRemove = useCallback(async (paperId: string) => {
     try {
       await deleteSavedPaper(paperId);
       setSavedPapers((prev) => prev.filter((p) => p.paper_id !== paperId));
       setSavedIds((prev) => { const next = new Set(prev); next.delete(paperId); return next; });
+      onPaperDeleted?.(paperId);
     } catch {}
+  }, [onPaperDeleted]);
+
+  const handlePaperUpdate = useCallback((updated: SavedPaper) => {
+    setSavedPapers((prev) => prev.map((p) => p.paper_id === updated.paper_id ? updated : p));
   }, []);
 
   const handleCite = useCallback(async (paperId: string) => {
@@ -112,7 +124,7 @@ export default function ResearchPanel({
   if (!open) return null;
 
   return (
-    <div className="w-80 flex-shrink-0 bg-macos-surface border-l border-macos-border flex flex-col overflow-hidden relative">
+    <div className="flex-shrink-0 bg-macos-surface border-l border-macos-border flex flex-col overflow-hidden relative" style={{ width: panelWidth }}>
       <div className="flex items-center justify-between px-3 py-2 border-b border-macos-border">
         <span className="text-xs font-semibold uppercase tracking-widest text-macos-accent">Research</span>
         <button onClick={onClose} className="text-macos-text-secondary hover:text-macos-text text-sm">&times;</button>
@@ -163,6 +175,7 @@ export default function ResearchPanel({
           essayId={essayId || undefined}
           onRemove={handleRemove}
           onCite={handleCite}
+          onPaperUpdate={handlePaperUpdate}
         />
       )}
 
@@ -181,6 +194,10 @@ export default function ResearchPanel({
           />
         </div>
       )}
+      <div
+        onMouseDown={handleMouseDown}
+        className="absolute top-0 left-0 w-1.5 h-full cursor-col-resize hover:bg-macos-accent/20 transition-colors"
+      />
     </div>
   );
 }

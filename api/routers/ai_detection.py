@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from routers import essays as essays_router
 from services.ai_pattern_detector import DetectionError, detect_ai_patterns
+from services.confidence_scorer import compute_confidence
 from services.sandbox import atomic_write, data_root
 
 router = APIRouter(prefix="/ai", tags=["ai-detection"])
@@ -52,6 +53,8 @@ class AIDetectionResult(BaseModel):
     provider: Literal["codex"]
     created_at: str
     selection_label: Optional[str] = None
+    profile_context_provided: Optional[bool] = False
+    degraded: Optional[bool] = False
 
 
 class DetectionHistoryResponse(BaseModel):
@@ -94,31 +97,37 @@ def _load_profile_metrics(profile_id: str) -> Dict[str, Any]:
 
 
 def _risk_level(score: int) -> str:
-    if score >= 70:
+    if score >= 60:
         return "high"
-    if score >= 35:
+    if score >= 30:
         return "medium"
     return "low"
 
 
 def _verdict(score: int) -> str:
-    if score >= 70:
+    if score >= 60:
         return "likely_ai"
-    if score >= 40:
+    if score >= 30:
         return "mixed"
     return "likely_human"
 
 
 def _build_result(body: AIDetectionRequest, raw: Dict[str, Any]) -> AIDetectionResult:
-    try:
-        score = int(raw.get("risk_score", 50))
-    except Exception:
-        score = 50
+    degraded = raw.get("degraded", False)
 
+    raw_score = raw.get("risk_score", 25)
     try:
-        confidence = int(raw.get("confidence", 50))
+        if isinstance(raw_score, bool):
+            score = 25
+            degraded = True
+        else:
+            score = int(raw_score)
     except Exception:
-        confidence = 50
+        score = 25
+        degraded = True
+
+    # Confidence is computed deterministically by the scorer; placeholder here.
+    confidence = 0
 
     suggestions = raw.get("suggestions") if isinstance(raw.get("suggestions"), list) else []
     suggestions = [s for s in suggestions if isinstance(s, str) and s.strip()]
@@ -138,9 +147,9 @@ def _build_result(body: AIDetectionRequest, raw: Dict[str, Any]) -> AIDetectionR
             end_char = start_char
         if end_char < start_char:
             end_char = start_char
-        severity = str(item.get("severity", "medium")).lower()
+        severity = str(item.get("severity", "low")).lower()
         if severity not in {"low", "medium", "high"}:
-            severity = "medium"
+            severity = "low"
 
         flags.append(
             DetectionFlag(
@@ -168,6 +177,8 @@ def _build_result(body: AIDetectionRequest, raw: Dict[str, Any]) -> AIDetectionR
         provider="codex",
         created_at=datetime.now(timezone.utc).isoformat(),
         selection_label=body.selection_label,
+        profile_context_provided=raw.get("profile_context_provided", False),
+        degraded=degraded,
     )
 
     if not result.suggestions:
@@ -212,7 +223,21 @@ async def detect_patterns(body: AIDetectionRequest):
 
     result = _build_result(body, raw)
 
-    if body.essay_id:
+    # Compute deterministic confidence from normalized data
+    try:
+        from services.style_analyzer import analyze_style
+        nlp_metrics = analyze_style(text)
+    except Exception:
+        nlp_metrics = {"word_count": len(text.split())}
+
+    result.confidence = compute_confidence(
+        risk_score=result.risk_score,
+        flags=[f.model_dump() for f in result.flags],
+        nlp_metrics=nlp_metrics,
+        profile_metrics=profile_metrics,
+    )
+
+    if body.essay_id and not result.degraded:
         checks = _load_ai_checks(body.essay_id)
         checks.append(result.model_dump())
         _persist_ai_checks(body.essay_id, checks)

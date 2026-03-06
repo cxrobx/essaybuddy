@@ -2,38 +2,25 @@
 
 import { useState, useRef, useCallback } from "react";
 import Modal from "@/components/ui/Modal";
-import { uploadTextbook } from "@/lib/api";
-import type { Textbook } from "@/lib/types";
 
 export default function TextbookUploadModal({
   open,
   onClose,
-  onUploaded,
+  onFileSelected,
 }: {
   open: boolean;
   onClose: () => void;
-  onUploaded: (textbook: Textbook) => void;
+  onFileSelected: (file: File) => void;
 }) {
   const [dragging, setDragging] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = useCallback(
-    async (file: File) => {
-      setError("");
-      setUploading(true);
-      try {
-        const textbook = await uploadTextbook(file);
-        onUploaded(textbook);
-        onClose();
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "Upload failed");
-      } finally {
-        setUploading(false);
-      }
+    (file: File) => {
+      onFileSelected(file);
+      onClose();
     },
-    [onClose, onUploaded]
+    [onClose, onFileSelected]
   );
 
   const handleDrop = useCallback(
@@ -62,17 +49,14 @@ export default function TextbookUploadModal({
         onDrop={handleDrop}
       >
         <div className="text-macos-text-secondary text-sm mb-2">
-          {uploading
-            ? "Uploading..."
-            : "Drag & drop a PDF here, or click to browse"}
+          Drag & drop a PDF here, or click to browse
         </div>
         <div className="text-[11px] text-macos-text-secondary mb-4">
-          Supported: .pdf (max 50MB)
+          Supported: .pdf (max 50MB) — upload runs in the background
         </div>
         <button
           onClick={() => inputRef.current?.click()}
-          disabled={uploading}
-          className="px-4 py-1.5 rounded text-xs font-medium bg-macos-accent hover:bg-macos-accent-hover text-white transition-colors disabled:opacity-50"
+          className="px-4 py-1.5 rounded text-xs font-medium bg-macos-accent hover:bg-macos-accent-hover text-white transition-colors"
         >
           Choose File
         </button>
@@ -84,14 +68,10 @@ export default function TextbookUploadModal({
           onChange={(e) => {
             const file = e.target.files?.[0];
             if (file) handleFile(file);
+            if (e.target) e.target.value = "";
           }}
         />
       </div>
-      {error && (
-        <div className="mt-3 p-2 rounded bg-macos-error/10 border border-macos-error/30 text-xs text-macos-error">
-          {error}
-        </div>
-      )}
     </Modal>
   );
 }

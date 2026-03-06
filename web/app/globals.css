@@ -155,3 +155,29 @@ body {
   text-transform: uppercase;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
 }
+
+/* Selection bubble menu (tippy theme) */
+.tippy-box[data-theme~="zora-bubble"] {
+  background: rgb(var(--macos-surface));
+  border: 1px solid rgb(var(--macos-border));
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgb(var(--shadow-color) / 0.15);
+}
+.tippy-box[data-theme~="zora-bubble"] .tippy-content {
+  padding: 4px;
+}
+.tippy-box[data-theme~="zora-bubble"] .tippy-arrow {
+  color: rgb(var(--macos-surface));
+}
+.tippy-box[data-theme~="zora-bubble"] .tippy-arrow::before {
+  border-top-color: rgb(var(--macos-border));
+  top: -1px;
+}
+
+@keyframes bubble-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.bubble-score-result {
+  animation: bubble-fade-in 0.2s ease-out;
+}
