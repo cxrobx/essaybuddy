@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { listEssays, createEssay, deleteEssay } from "@/lib/api";
 import type { EssayListItem } from "@/lib/types";
 import EssayCard from "./EssayCard";
-import UserMenu from "@/components/UserMenu";
 
 export default function EssayManager() {
   const router = useRouter();
@@ -60,15 +59,12 @@ export default function EssayManager() {
           <span className="font-serif font-semibold text-lg tracking-tight text-macos-text">
             &#9998; Zora
           </span>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleNewEssay}
-              className="px-4 py-2 rounded-lg text-sm font-medium bg-macos-accent text-white hover:bg-macos-accent/90 transition-colors"
-            >
-              New Essay
-            </button>
-            <UserMenu />
-          </div>
+          <button
+            onClick={handleNewEssay}
+            className="px-4 py-2 rounded-lg text-sm font-medium bg-macos-accent text-white hover:bg-macos-accent/90 transition-colors"
+          >
+            New Essay
+          </button>
         </div>
 
         {error && (

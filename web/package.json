@@ -17,7 +17,6 @@
     "@tiptap/react": "^2.11.5",
     "@tiptap/starter-kit": "^2.11.5",
     "next": "15.1.6",
-    "next-auth": "^4.24.13",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tiptap-markdown": "^0.8.10"

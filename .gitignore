@@ -22,7 +22,6 @@ data/samples/files/*
 !data/research/papers/.gitkeep
 .DS_Store
 .env
-.codex/
 .playwright-mcp/
 .serena/
 *.png
