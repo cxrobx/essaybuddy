@@ -50,6 +50,24 @@ if ! command -v npm &>/dev/null; then
 fi
 echo "[ok] npm $(npm --version)"
 
+# -- Check Codex CLI (warning only) -------------------------------------------
+if command -v codex &>/dev/null; then
+    echo "[ok] Codex CLI found"
+else
+    echo "[!!] Codex CLI not found (optional — needed for AI skills)"
+    echo "     Install: https://github.com/openai/codex"
+fi
+
+# -- Environment file ---------------------------------------------------------
+if [ ! -f ".env" ]; then
+    echo ""
+    echo "-> Creating .env from .env.example..."
+    cp .env.example .env
+    echo "[ok] .env created"
+else
+    echo "[ok] .env already exists"
+fi
+
 # -- Python venv + deps -------------------------------------------------------
 if [ ! -f "api/.venv/bin/python3" ]; then
     echo ""
@@ -72,20 +90,50 @@ else
 fi
 
 # -- Data directories ----------------------------------------------------------
-mkdir -p data/essays data/samples/files data/profiles
+mkdir -p data/essays data/samples/files data/profiles data/research/papers data/research/cache
 echo "[ok] Data directories ready"
+
+# -- Copy starter data (only if data/essays is empty) -------------------------
+if [ -d "fixtures" ] && [ -z "$(ls -A data/essays/ 2>/dev/null | grep -v .gitkeep)" ]; then
+    echo ""
+    echo "-> Copying starter sample data..."
+    cp fixtures/essays/*.md data/essays/ 2>/dev/null || true
+    cp fixtures/samples/*.json data/samples/ 2>/dev/null || true
+    cp fixtures/profiles/*.json data/profiles/ 2>/dev/null || true
+    echo "[ok] Starter data copied (essays, samples, profile)"
+else
+    echo "[ok] Data already present, skipping starter data"
+fi
+
+# -- Build .app (if swiftc available) -----------------------------------------
+if [ -d "launcher/dist/EssayBuddy.app" ]; then
+    echo "[ok] EssayBuddy.app already built"
+elif command -v swiftc &>/dev/null; then
+    echo ""
+    echo "-> Building EssayBuddy.app..."
+    bash launcher/build.sh
+    echo "[ok] EssayBuddy.app built"
+else
+    echo ""
+    echo "[!!] swiftc not found — install Xcode Command Line Tools to build the app:"
+    echo "     xcode-select --install"
+    echo "     Then re-run: bash setup.sh"
+    echo "     You can still run manually via terminal."
+fi
 
 # -- Gatekeeper (if .app exists) -----------------------------------------------
 if [ -d "launcher/dist/EssayBuddy.app" ]; then
-    echo ""
-    echo "-> Clearing Gatekeeper quarantine on Zora (EssayBuddy.app)..."
+    echo "-> Clearing Gatekeeper quarantine..."
     xattr -dr com.apple.quarantine "launcher/dist/EssayBuddy.app" 2>/dev/null || true
     echo "[ok] Quarantine cleared"
 fi
 
 echo ""
-echo "Setup complete! You can now:"
-echo "  1. Open launcher/dist/EssayBuddy.app"
-echo "  2. Or run manually:"
-echo "     cd api && source .venv/bin/activate && python3 main.py &"
-echo "     cd web && npm run dev"
+echo "=========================================="
+echo "Setup complete! Launch Zora:"
+echo "  open launcher/dist/EssayBuddy.app"
+echo ""
+echo "Or run manually:"
+echo "  cd api && source .venv/bin/activate && python3 main.py &"
+echo "  cd web && npm run dev"
+echo "=========================================="

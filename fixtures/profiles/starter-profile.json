@@ -1,0 +1,20 @@
+{
+  "id": "starter-profile",
+  "name": "Example Voice Profile",
+  "sample_ids": ["sample-narrative", "sample-analytical"],
+  "metrics": {
+    "word_count": 1542,
+    "sentence_count": 58,
+    "avg_sentence_length": 26.6,
+    "avg_word_length": 5.1,
+    "vocabulary_richness": 0.72,
+    "flesch_reading_ease": 42.3,
+    "flesch_kincaid_grade": 13.8,
+    "passive_voice_pct": 0.08,
+    "paragraph_count": 10,
+    "avg_paragraph_length": 154.2
+  },
+  "voice_model": null,
+  "created_at": "2026-03-01T11:00:00",
+  "bundled": true
+}

@@ -134,7 +134,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         // Resolve repo path: walk up from the binary to find the project root.
         // Binary lives at: <repo>/launcher/dist/EssayBuddy.app/Contents/MacOS/EssayBuddy
         // So repo = binary/../../../../../..
-        // Fallback to ~/Projects/essaybuddy if that doesn't contain api/main.py
         if let execURL = Bundle.main.executableURL {
             let dir = execURL
                 .deletingLastPathComponent()  // MacOS/
@@ -147,7 +146,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 return dir.path
             }
         }
+        // Fallback: search common clone locations
         let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let candidates = [
+            "\(home)/Projects/essaybuddy",
+            "\(home)/projects/essaybuddy",
+            "\(home)/Code/essaybuddy",
+            "\(home)/code/essaybuddy",
+            "\(home)/Developer/essaybuddy",
+            "\(home)/essaybuddy",
+            "\(home)/Desktop/essaybuddy",
+        ]
+        for path in candidates {
+            if FileManager.default.fileExists(atPath: "\(path)/api/main.py") {
+                return path
+            }
+        }
         return "\(home)/Projects/essaybuddy"
     }
 
@@ -259,7 +273,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     private func waitForServer(url: String, attempts: Int, completion: @escaping () -> Void) {
         guard attempts > 0 else {
             DispatchQueue.main.async {
-                self.showError("A server did not start in time.\n\nOpen your terminal in ~/Projects/essaybuddy and ask your AI CLI:\n  \"EssayBuddy servers won't start — diagnose and fix\"")
+                self.showError("A server did not start in time.\n\nOpen your terminal in the essaybuddy project folder and ask your AI CLI:\n  \"EssayBuddy servers won't start — diagnose and fix\"")
             }
             return
         }
