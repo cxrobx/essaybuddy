@@ -74,7 +74,7 @@ export default function EvidenceLibrary({
         {filtered.length === 0 ? (
           <div className="text-xs text-macos-text-secondary py-4 text-center">
             {items.length === 0
-              ? "No evidence extracted yet. Use \"Extract\" to pull quotes from textbooks."
+              ? "No evidence extracted yet. Use \"Extract\" to pull quotes from books."
               : "No items match this filter."}
           </div>
         ) : (

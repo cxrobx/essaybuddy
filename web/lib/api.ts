@@ -51,7 +51,7 @@ export async function deleteEssay(id: string): Promise<void> {
   if (!res.ok) throw new Error("Failed to delete essay");
 }
 
-export async function exportEssay(id: string, format: "md" | "html" | "fountain"): Promise<void> {
+export async function exportEssay(id: string, format: "md" | "html" | "fountain" | "pdf" | "docx"): Promise<void> {
   const res = await fetch(`${BASE}/essays/${id}/export?format=${format}`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Export failed" }));

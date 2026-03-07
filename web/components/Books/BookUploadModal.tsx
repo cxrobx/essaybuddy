@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback } from "react";
 import Modal from "@/components/ui/Modal";
 
-export default function TextbookUploadModal({
+export default function BookUploadModal({
   open,
   onClose,
   onFileSelected,
@@ -34,7 +34,7 @@ export default function TextbookUploadModal({
   );
 
   return (
-    <Modal open={open} onClose={onClose} title="Upload Textbook">
+    <Modal open={open} onClose={onClose} title="Upload Book">
       <div
         className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
           dragging

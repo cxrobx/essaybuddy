@@ -43,6 +43,7 @@ export default function ZoraPanel({
   onUpdateCustomAction,
   onDeleteCustomAction,
   onCustomActionGenerate,
+  contentNoun,
 }: {
   onClose: () => void;
   essayId: string | null;
@@ -71,6 +72,7 @@ export default function ZoraPanel({
   onUpdateCustomAction?: (id: string, name: string, instructions: string) => void;
   onDeleteCustomAction?: (id: string) => void;
   onCustomActionGenerate?: (text: string, actionId: string) => Promise<string>;
+  contentNoun?: string;
 }) {
   const [tab, setTab] = useState<ZoraTab>("tools");
   const [detectionElapsed, setDetectionElapsed] = useState(0);
@@ -150,6 +152,7 @@ export default function ZoraPanel({
           onUpdateCustomAction={onUpdateCustomAction}
           onDeleteCustomAction={onDeleteCustomAction}
           onCustomActionGenerate={onCustomActionGenerate}
+          contentNoun={contentNoun}
         />
       )}
       <div className={tab === "detector" ? "flex-1 flex flex-col overflow-hidden" : "hidden"}>

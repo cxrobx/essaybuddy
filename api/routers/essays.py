@@ -1,4 +1,5 @@
 """Essay CRUD endpoints — markdown files with YAML frontmatter."""
+import io
 import json
 import re
 import uuid
@@ -339,8 +340,112 @@ async def export_essay(essay_id: str, format: str = "md"):
             media_type="application/octet-stream",
             headers={"Content-Disposition": f'attachment; filename="{safe_title}.fountain"'},
         )
+    elif format == "pdf":
+        from fpdf import FPDF
+        pdf = FPDF()
+        pdf.set_auto_page_break(auto=True, margin=25)
+        # Use system Arial TTF for full unicode support; fall back to core Helvetica
+        _font_dir = Path("/System/Library/Fonts/Supplemental")
+        if (_font_dir / "Arial.ttf").exists():
+            pdf.add_font("body", "", str(_font_dir / "Arial.ttf"))
+            pdf.add_font("body", "B", str(_font_dir / "Arial Bold.ttf"))
+            pdf.add_font("body", "I", str(_font_dir / "Arial Italic.ttf"))
+            _font = "body"
+        else:
+            _font = "Helvetica"
+        pdf.add_page()
+        pdf.set_font(_font, "B", 18)
+        pdf.cell(0, 12, title, new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(4)
+        pdf.set_font(_font, size=12)
+        for line in content.split("\n"):
+            stripped = line.strip()
+            pdf.set_x(pdf.l_margin)  # reset cursor after multi_cell
+            heading_match = re.match(r'^(#{1,6})\s+(.*)', stripped)
+            if heading_match:
+                level = len(heading_match.group(1))
+                sizes = {1: 18, 2: 16, 3: 14, 4: 13, 5: 12, 6: 11}
+                pdf.ln(4)
+                pdf.set_font(_font, "B", sizes.get(level, 12))
+                pdf.cell(0, 10, heading_match.group(2), new_x="LMARGIN", new_y="NEXT")
+                pdf.set_font(_font, size=12)
+                continue
+            if stripped.startswith("> "):
+                pdf.set_font(_font, "I", 12)
+                pdf.multi_cell(0, 6, stripped[2:])
+                pdf.set_font(_font, size=12)
+                continue
+            if not stripped:
+                pdf.ln(4)
+                continue
+            # Strip basic markdown formatting for plain text output
+            text = re.sub(r'\*\*([^*]+)\*\*', r'\1', stripped)
+            text = re.sub(r'\*([^*]+)\*', r'\1', text)
+            text = re.sub(r'_([^_]+)_', r'\1', text)
+            text = re.sub(r'^[-*]\s+', '  - ', text)
+            pdf.multi_cell(0, 6, text)
+        pdf_buffer = io.BytesIO()
+        pdf.output(pdf_buffer)
+        pdf_buffer.seek(0)
+        return Response(
+            content=pdf_buffer.read(),
+            media_type="application/octet-stream",
+            headers={"Content-Disposition": f'attachment; filename="{safe_title}.pdf"'},
+        )
+    elif format == "docx":
+        from docx import Document as DocxDocument
+        from docx.shared import Pt
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        doc = DocxDocument()
+        doc.add_heading(title, level=0)
+        for line in content.split("\n"):
+            stripped = line.strip()
+            if not stripped:
+                continue
+            # Headings
+            heading_match = re.match(r'^(#{1,6})\s+(.*)', stripped)
+            if heading_match:
+                level = len(heading_match.group(1))
+                doc.add_heading(heading_match.group(2), level=min(level, 4))
+                continue
+            # Blockquotes
+            if stripped.startswith("> "):
+                p = doc.add_paragraph(stripped[2:])
+                p.runs[0].italic = True
+                continue
+            # Bullet list items
+            if re.match(r'^[-*]\s+', stripped):
+                text = re.sub(r'^[-*]\s+', '', stripped)
+                doc.add_paragraph(text, style='List Bullet')
+                continue
+            # Numbered list items
+            num_match = re.match(r'^\d+\.\s+(.*)', stripped)
+            if num_match:
+                doc.add_paragraph(num_match.group(1), style='List Number')
+                continue
+            # Regular paragraph with inline formatting
+            p = doc.add_paragraph()
+            # Split on bold (**text**) and italic (*text* or _text_)
+            parts = re.split(r'(\*\*[^*]+\*\*|\*[^*]+\*|_[^_]+_)', stripped)
+            for part in parts:
+                if part.startswith("**") and part.endswith("**"):
+                    run = p.add_run(part[2:-2])
+                    run.bold = True
+                elif (part.startswith("*") and part.endswith("*")) or (part.startswith("_") and part.endswith("_")):
+                    run = p.add_run(part[1:-1])
+                    run.italic = True
+                else:
+                    p.add_run(part)
+        docx_buffer = io.BytesIO()
+        doc.save(docx_buffer)
+        docx_buffer.seek(0)
+        return Response(
+            content=docx_buffer.read(),
+            media_type="application/octet-stream",
+            headers={"Content-Disposition": f'attachment; filename="{safe_title}.docx"'},
+        )
     else:
-        raise HTTPException(status_code=400, detail=f"Unsupported format: {format}. Use md, html, or fountain.")
+        raise HTTPException(status_code=400, detail=f"Unsupported format: {format}. Use md, html, fountain, pdf, or docx.")
 
 
 ALLOWED_OUTLINE_MIMES = {

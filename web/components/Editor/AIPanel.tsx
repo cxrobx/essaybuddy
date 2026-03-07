@@ -31,6 +31,7 @@ export default function AIPanel({
   onUpdateCustomAction,
   onDeleteCustomAction,
   onCustomActionGenerate,
+  contentNoun = "essay",
 }: {
   essayId: string | null;
   profileId: string | null;
@@ -50,6 +51,7 @@ export default function AIPanel({
   onUpdateCustomAction?: (id: string, name: string, instructions: string) => void;
   onDeleteCustomAction?: (id: string) => void;
   onCustomActionGenerate?: (text: string, actionId: string) => Promise<string>;
+  contentNoun?: string;
 }) {
   const [action, setAction] = useState<AIAction>("expand");
   const [loading, setLoading] = useState(false);
@@ -238,16 +240,16 @@ export default function AIPanel({
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
         {/* Generate Full Essay */}
         <div className="rounded-lg border border-macos-accent/30 bg-macos-accent/5 p-3 space-y-2">
-          <div className="text-xs font-semibold text-macos-accent">Generate Full Essay</div>
+          <div className="text-xs font-semibold text-macos-accent">Generate Full {contentNoun.charAt(0).toUpperCase() + contentNoun.slice(1)}</div>
           <p className="text-[10px] text-macos-text-secondary leading-relaxed">
-            Generate a complete essay from your writing plan, outline, evidence, and research — all in your voice.
+            Generate a complete {contentNoun} from your writing plan, outline, evidence, and research — all in your voice.
           </p>
           <button
             onClick={handleGenerateFullEssay}
             disabled={fullEssayLoading || noProfile || !essayId || !hasOutline}
             className="w-full px-3 py-2 rounded text-xs font-medium bg-macos-accent hover:bg-macos-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
           >
-            {fullEssayLoading ? "Generating... (this may take 1-2 min)" : "Generate Full Essay"}
+            {fullEssayLoading ? "Generating... (this may take 1-2 min)" : `Generate Full ${contentNoun.charAt(0).toUpperCase() + contentNoun.slice(1)}`}
           </button>
           {!hasOutline && !noProfile && essayId && (
             <p className="text-[10px] text-macos-warning">Generate an outline first.</p>

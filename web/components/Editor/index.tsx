@@ -21,7 +21,6 @@ import ZoraPanel from "./ZoraPanel";
 import { useTheme } from "@/lib/useTheme";
 import { useCustomActions } from "@/lib/useCustomActions";
 import StatusBadge from "@/components/ui/StatusBadge";
-import SampleList from "@/components/Samples/SampleList";
 import ProfileCreator from "@/components/Samples/ProfileCreator";
 import BookUploadModal from "@/components/Books/BookUploadModal";
 import AddWebSourceModal from "@/components/WebSources/AddWebSourceModal";
@@ -40,7 +39,6 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [aiOpen, setAiOpen] = useState(true);
-  const [samplesOpen, setSamplesOpen] = useState(false);
   const [profileCreatorOpen, setProfileCreatorOpen] = useState(false);
   const [sampleCount, setSampleCount] = useState(0);
   const [profileMetrics, setProfileMetrics] = useState<StyleMetrics | null>(null);
@@ -641,12 +639,6 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
           <span className="font-serif font-semibold text-sm tracking-tight text-macos-text">
             &#9998; Zora
           </span>
-          <button
-            onClick={() => setSamplesOpen(true)}
-            className="px-3 py-1 rounded-full text-xs font-medium border border-macos-border hover:border-macos-accent text-macos-text-secondary hover:text-macos-text transition-colors"
-          >
-            Voice
-          </button>
           {writingType.showOutlinePanel && (
             <button
               onClick={() => setOutlineOpen(!outlineOpen)}
@@ -720,6 +712,18 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
                   className="w-full text-left px-3 py-2 text-xs text-macos-text hover:bg-macos-accent/10 transition-colors border-t border-macos-border"
                 >
                   HTML (.html)
+                </button>
+                <button
+                  onClick={() => { exportEssay(essay!.id, "pdf"); setExportOpen(false); }}
+                  className="w-full text-left px-3 py-2 text-xs text-macos-text hover:bg-macos-accent/10 transition-colors border-t border-macos-border"
+                >
+                  PDF (.pdf)
+                </button>
+                <button
+                  onClick={() => { exportEssay(essay!.id, "docx"); setExportOpen(false); }}
+                  className="w-full text-left px-3 py-2 text-xs text-macos-text hover:bg-macos-accent/10 transition-colors border-t border-macos-border"
+                >
+                  Word (.docx)
                 </button>
                 {writingType.id === "screenplay" && (
                   <button
@@ -900,20 +904,15 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
           onClose={() => setWritingPlanOpen(false)}
           essay={essay}
           onFieldChange={handleWritingPlanFieldChange}
-          profileName={profileName}
+          activeProfileId={essay?.profile_id || null}
           books={books}
           sampleCount={sampleCount}
           writingType={writingType}
+          onProfileChange={handleProfileCreated}
+          onOpenProfileCreator={() => setProfileCreatorOpen(true)}
+          onSampleUploaded={handleSampleUploaded}
         />
       )}
-      <SampleList
-        open={samplesOpen}
-        onClose={() => setSamplesOpen(false)}
-        activeProfileId={essay?.profile_id || null}
-        onProfileChange={handleProfileCreated}
-        onNewProfile={() => setProfileCreatorOpen(true)}
-        onSampleUploaded={handleSampleUploaded}
-      />
       <ProfileCreator
         open={profileCreatorOpen}
         onClose={() => setProfileCreatorOpen(false)}

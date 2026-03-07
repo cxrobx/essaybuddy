@@ -433,12 +433,12 @@ def _build_evidence_context(evidence_items: Optional[List[Dict[str, Any]]]) -> s
 
     lines = [
         "<evidence>",
-        "## Textbook Evidence (integrate these quotes naturally with proper citations)",
+        "## Source Evidence (integrate these quotes naturally with proper citations)",
     ]
     for item in evidence_items:
         quote = str(item.get("quote", ""))
         page = item.get("page_number", "")
-        title = str(item.get("textbook_title", ""))
+        title = str(item.get("source_title", "") or item.get("textbook_title", ""))
         relevance = str(item.get("relevance", "")).strip()
         lines.append(f'- "{quote}" (p. {page}, {title})')
         if relevance:

@@ -1,21 +1,25 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
-import type { Textbook, EvidenceItem, OutlineSection } from "@/lib/types";
-import { deleteTextbook, updateTextbookTitle } from "@/lib/api";
+import { useState } from "react";
+import type { Book, WebSource, EvidenceItem, OutlineSection } from "@/lib/types";
+import { deleteBook, updateBook } from "@/lib/api";
 import EvidenceCard from "@/components/Evidence/EvidenceCard";
+import WebSourceList from "@/components/WebSources/WebSourceList";
 import { useResizablePanel } from "@/lib/useResizablePanel";
 
-type Tab = "textbooks" | "evidence";
+type Tab = "books" | "web-sources" | "evidence";
 type FilterTab = "all" | "unassigned" | "assigned";
 
 export default function SourcesPanel({
   open,
   onClose,
-  textbooks,
-  onTextbooksChange,
-  onUploadTextbook,
+  books,
+  onBooksChange,
+  onUploadBook,
   onExtract,
+  webSources,
+  onWebSourcesChange,
+  onAddWebSource,
   evidenceItems,
   sections,
   onAssign,
@@ -24,17 +28,20 @@ export default function SourcesPanel({
 }: {
   open: boolean;
   onClose: () => void;
-  textbooks: Textbook[];
-  onTextbooksChange: (textbooks: Textbook[]) => void;
-  onUploadTextbook: () => void;
+  books: Book[];
+  onBooksChange: (books: Book[]) => void;
+  onUploadBook: () => void;
   onExtract: () => void;
+  webSources: WebSource[];
+  onWebSourcesChange: (sources: WebSource[]) => void;
+  onAddWebSource: () => void;
   evidenceItems: EvidenceItem[];
   sections: OutlineSection[];
   onAssign: (evidenceId: string, sectionId: string) => void;
   onUnassign: (evidenceId: string) => void;
   onDelete: (evidenceId: string) => void;
 }) {
-  const [tab, setTab] = useState<Tab>("textbooks");
+  const [tab, setTab] = useState<Tab>("books");
   const [filter, setFilter] = useState<FilterTab>("all");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -43,18 +50,18 @@ export default function SourcesPanel({
 
   if (!open) return null;
 
-  const handleDeleteTextbook = async (id: string) => {
+  const handleDeleteBook = async (id: string) => {
     try {
-      await deleteTextbook(id);
-      onTextbooksChange(textbooks.filter((t) => t.id !== id));
+      await deleteBook(id);
+      onBooksChange(books.filter((t) => t.id !== id));
     } catch {
-      setError("Failed to delete textbook");
+      setError("Failed to delete book");
     }
   };
 
-  const handleStartEdit = (textbook: Textbook) => {
-    setEditingId(textbook.id);
-    setEditTitle(textbook.title);
+  const handleStartEdit = (book: Book) => {
+    setEditingId(book.id);
+    setEditTitle(book.title);
   };
 
   const handleSaveTitle = async (id: string) => {
@@ -63,9 +70,9 @@ export default function SourcesPanel({
       return;
     }
     try {
-      const updated = await updateTextbookTitle(id, editTitle.trim());
-      onTextbooksChange(
-        textbooks.map((t) => (t.id === id ? { ...t, title: updated.title } : t))
+      const updated = await updateBook(id, { title: editTitle.trim() });
+      onBooksChange(
+        books.map((t) => (t.id === id ? { ...t, title: updated.title } : t))
       );
     } catch {
       setError("Failed to update title");
@@ -86,6 +93,12 @@ export default function SourcesPanel({
     { key: "assigned", label: "Assigned", count: evidenceItems.filter((i) => !!i.section_id).length },
   ];
 
+  const tabs: { key: Tab; label: string; count: number }[] = [
+    { key: "books", label: "Books", count: books.length },
+    { key: "web-sources", label: "Web Sources", count: webSources.length },
+    { key: "evidence", label: "Evidence", count: evidenceItems.length },
+  ];
+
   return (
     <div className="flex-shrink-0 bg-macos-surface border-l border-macos-border flex flex-col overflow-hidden relative" style={{ width: panelWidth }}>
       {/* Header */}
@@ -103,38 +116,31 @@ export default function SourcesPanel({
 
       {/* Tab bar */}
       <div className="flex border-b border-macos-border">
-        <button
-          onClick={() => setTab("textbooks")}
-          className={`flex-1 px-2 py-1.5 text-[11px] font-medium transition-colors ${
-            tab === "textbooks"
-              ? "text-macos-accent border-b-2 border-macos-accent"
-              : "text-macos-text-secondary hover:text-macos-text"
-          }`}
-        >
-          Textbooks{textbooks.length > 0 ? ` (${textbooks.length})` : ""}
-        </button>
-        <button
-          onClick={() => setTab("evidence")}
-          className={`flex-1 px-2 py-1.5 text-[11px] font-medium transition-colors ${
-            tab === "evidence"
-              ? "text-macos-accent border-b-2 border-macos-accent"
-              : "text-macos-text-secondary hover:text-macos-text"
-          }`}
-        >
-          Evidence{evidenceItems.length > 0 ? ` (${evidenceItems.length})` : ""}
-        </button>
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`flex-1 px-2 py-1.5 text-[11px] font-medium transition-colors ${
+              tab === t.key
+                ? "text-macos-accent border-b-2 border-macos-accent"
+                : "text-macos-text-secondary hover:text-macos-text"
+            }`}
+          >
+            {t.label}{t.count > 0 ? ` (${t.count})` : ""}
+          </button>
+        ))}
       </div>
 
-      {/* Textbooks tab */}
-      {tab === "textbooks" && (
+      {/* Books tab */}
+      {tab === "books" && (
         <>
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            {textbooks.length === 0 ? (
+            {books.length === 0 ? (
               <div className="text-xs text-macos-text-secondary py-4 text-center">
-                No textbooks uploaded yet. Upload PDFs to extract evidence quotes.
+                No books uploaded yet. Upload PDFs to extract evidence quotes.
               </div>
             ) : (
-              textbooks.map((t) => (
+              books.map((t) => (
                 <div
                   key={t.id}
                   className="flex items-center justify-between px-2 py-1.5 rounded bg-macos-bg text-xs group"
@@ -171,7 +177,7 @@ export default function SourcesPanel({
                     </div>
                   </div>
                   <button
-                    onClick={() => handleDeleteTextbook(t.id)}
+                    onClick={() => handleDeleteBook(t.id)}
                     className="text-macos-text-secondary hover:text-macos-error text-xs flex-shrink-0 opacity-0 group-hover:opacity-100"
                   >
                     Delete
@@ -183,20 +189,31 @@ export default function SourcesPanel({
 
           <div className="p-2 border-t border-macos-border space-y-1.5">
             <button
-              onClick={onUploadTextbook}
+              onClick={onUploadBook}
               className="w-full py-1.5 rounded text-xs font-medium border border-dashed border-macos-border text-macos-text-secondary hover:border-macos-accent hover:text-macos-accent transition-colors"
             >
-              + Upload Textbook
+              + Upload Book
             </button>
             <button
               onClick={onExtract}
-              disabled={textbooks.length === 0}
+              disabled={books.length === 0}
               className="w-full py-1.5 rounded text-xs font-medium bg-macos-accent hover:bg-macos-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white transition-colors"
             >
               Extract Quotes
             </button>
           </div>
         </>
+      )}
+
+      {/* Web Sources tab */}
+      {tab === "web-sources" && (
+        <div className="flex-1 overflow-y-auto p-2">
+          <WebSourceList
+            sources={webSources}
+            onSourcesChange={onWebSourcesChange}
+            onAdd={onAddWebSource}
+          />
+        </div>
       )}
 
       {/* Evidence tab */}
@@ -223,7 +240,7 @@ export default function SourcesPanel({
             {filtered.length === 0 ? (
               <div className="text-xs text-macos-text-secondary py-4 text-center">
                 {evidenceItems.length === 0
-                  ? "No evidence extracted yet. Upload textbooks and extract quotes."
+                  ? "No evidence extracted yet. Upload books and extract quotes."
                   : "No items match this filter."}
               </div>
             ) : (

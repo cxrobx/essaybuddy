@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import Modal from "@/components/ui/Modal";
 import { extractEvidence } from "@/lib/api";
-import type { Textbook, EvidenceItem } from "@/lib/types";
+import type { Book, EvidenceItem } from "@/lib/types";
 
 type Step = "select" | "chapter" | "params" | "extracting" | "results";
 
@@ -11,7 +11,7 @@ export default function ExtractionModal({
   open,
   onClose,
   essayId,
-  textbooks,
+  books,
   topic,
   thesis,
   profileId,
@@ -21,7 +21,7 @@ export default function ExtractionModal({
   open: boolean;
   onClose: () => void;
   essayId: string;
-  textbooks: Textbook[];
+  books: Book[];
   topic?: string;
   thesis?: string;
   profileId?: string;
@@ -29,7 +29,7 @@ export default function ExtractionModal({
   onExtracted: (items: EvidenceItem[]) => void;
 }) {
   const [step, setStep] = useState<Step>("select");
-  const [selectedTextbook, setSelectedTextbook] = useState<string>("");
+  const [selectedBook, setSelectedBook] = useState<string>("");
   const [pageStart, setPageStart] = useState<string>("");
   const [pageEnd, setPageEnd] = useState<string>("");
   const [chapterRef, setChapterRef] = useState<string>("");
@@ -40,7 +40,7 @@ export default function ExtractionModal({
 
   const reset = useCallback(() => {
     setStep("select");
-    setSelectedTextbook("");
+    setSelectedBook("");
     setPageStart("");
     setPageEnd("");
     setChapterRef("");
@@ -63,7 +63,7 @@ export default function ExtractionModal({
     try {
       const result = await extractEvidence({
         essay_id: essayId,
-        textbook_id: selectedTextbook,
+        book_id: selectedBook,
         chapter: {
           page_start: pageStart ? Number(pageStart) : undefined,
           page_end: pageEnd ? Number(pageEnd) : undefined,
@@ -99,7 +99,7 @@ export default function ExtractionModal({
     handleClose();
   };
 
-  const selectedBook = textbooks.find((t) => t.id === selectedTextbook);
+  const selectedBookObj = books.find((t) => t.id === selectedBook);
 
   return (
     <Modal
@@ -111,27 +111,27 @@ export default function ExtractionModal({
         <div className="space-y-4">
           <div>
             <label className="block text-xs font-semibold text-macos-text mb-1.5">
-              Select Textbook
+              Select Book
             </label>
-            {textbooks.length === 0 ? (
+            {books.length === 0 ? (
               <div className="text-xs text-macos-text-secondary py-2">
-                No textbooks uploaded. Upload a textbook PDF first.
+                No books uploaded. Upload a book PDF first.
               </div>
             ) : (
               <div className="space-y-1">
-                {textbooks.map((t) => (
+                {books.map((t) => (
                   <button
                     key={t.id}
-                    onClick={() => setSelectedTextbook(t.id)}
+                    onClick={() => setSelectedBook(t.id)}
                     className={`w-full flex items-center gap-2 px-3 py-2 rounded text-xs text-left transition-colors ${
-                      selectedTextbook === t.id
+                      selectedBook === t.id
                         ? "bg-macos-accent/20 border border-macos-accent/40 text-macos-text"
                         : "bg-macos-bg border border-macos-border text-macos-text-secondary hover:bg-macos-elevated"
                     }`}
                   >
                     <span
                       className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                        selectedTextbook === t.id ? "bg-macos-accent" : "bg-macos-border"
+                        selectedBook === t.id ? "bg-macos-accent" : "bg-macos-border"
                       }`}
                     />
                     <span className="flex-1 truncate">{t.title}</span>
@@ -145,7 +145,7 @@ export default function ExtractionModal({
           </div>
           <button
             onClick={() => setStep("chapter")}
-            disabled={!selectedTextbook}
+            disabled={!selectedBook}
             className="w-full py-2 rounded text-xs font-medium bg-macos-accent hover:bg-macos-accent-hover text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Next
@@ -170,7 +170,7 @@ export default function ExtractionModal({
                 <input
                   type="number"
                   min={1}
-                  max={selectedBook?.page_count}
+                  max={selectedBookObj?.page_count}
                   value={pageStart}
                   onChange={(e) => setPageStart(e.target.value)}
                   placeholder="1"
@@ -184,10 +184,10 @@ export default function ExtractionModal({
                 <input
                   type="number"
                   min={1}
-                  max={selectedBook?.page_count}
+                  max={selectedBookObj?.page_count}
                   value={pageEnd}
                   onChange={(e) => setPageEnd(e.target.value)}
-                  placeholder={String(selectedBook?.page_count || "")}
+                  placeholder={String(selectedBookObj?.page_count || "")}
                   className="w-full px-2 py-1.5 rounded text-xs bg-macos-bg border border-macos-border text-macos-text outline-none focus:border-macos-accent"
                 />
               </div>
@@ -274,7 +274,7 @@ export default function ExtractionModal({
             Extracting evidence...
           </div>
           <div className="text-xs text-macos-text-secondary">
-            Analyzing textbook content for relevant quotes
+            Analyzing book content for relevant quotes
           </div>
           <div className="text-[11px] text-macos-text-secondary/50">
             This may take up to 2 minutes

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { EssayListItem } from "@/lib/types";
+import { getWritingType } from "@/lib/writingTypes";
 
 function timeAgo(dateStr: string): string {
   if (!dateStr) return "";
@@ -37,6 +38,15 @@ export default function EssayCard({
       <h3 className="text-sm font-semibold text-macos-text line-clamp-2 pr-6">
         {essay.title || "Untitled"}
       </h3>
+      {(() => {
+        const wt = getWritingType(essay.writing_type);
+        return (
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-macos-accent/10 text-[10px] text-macos-accent font-medium w-fit">
+            <span>{wt.icon}</span>
+            <span>{wt.label}</span>
+          </span>
+        );
+      })()}
       <p className="text-xs text-macos-text-secondary line-clamp-1">
         {essay.topic ? essay.topic : <span className="italic">No topic</span>}
       </p>

@@ -2,21 +2,21 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Modal from "@/components/ui/Modal";
-import { listTextbooks, deleteTextbook, updateTextbookTitle } from "@/lib/api";
-import type { Textbook } from "@/lib/types";
+import { listBooks, deleteBook, updateBook } from "@/lib/api";
+import type { Book } from "@/lib/types";
 
-export default function TextbookList({
+export default function BookList({
   open,
   onClose,
   onUpload,
-  textbooks,
-  onTextbooksChange,
+  books,
+  onBooksChange,
 }: {
   open: boolean;
   onClose: () => void;
   onUpload: () => void;
-  textbooks: Textbook[];
-  onTextbooksChange: (textbooks: Textbook[]) => void;
+  books: Book[];
+  onBooksChange: (books: Book[]) => void;
 }) {
   const [error, setError] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -24,12 +24,12 @@ export default function TextbookList({
 
   const refresh = useCallback(async () => {
     try {
-      const books = await listTextbooks();
-      onTextbooksChange(books);
+      const result = await listBooks();
+      onBooksChange(result);
     } catch {
       // ignore
     }
-  }, [onTextbooksChange]);
+  }, [onBooksChange]);
 
   useEffect(() => {
     if (open) refresh();
@@ -37,16 +37,16 @@ export default function TextbookList({
 
   const handleDelete = async (id: string) => {
     try {
-      await deleteTextbook(id);
-      onTextbooksChange(textbooks.filter((t) => t.id !== id));
+      await deleteBook(id);
+      onBooksChange(books.filter((t) => t.id !== id));
     } catch {
-      setError("Failed to delete textbook");
+      setError("Failed to delete book");
     }
   };
 
-  const handleStartEdit = (textbook: Textbook) => {
-    setEditingId(textbook.id);
-    setEditTitle(textbook.title);
+  const handleStartEdit = (book: Book) => {
+    setEditingId(book.id);
+    setEditTitle(book.title);
   };
 
   const handleSaveTitle = async (id: string) => {
@@ -55,9 +55,9 @@ export default function TextbookList({
       return;
     }
     try {
-      const updated = await updateTextbookTitle(id, editTitle.trim());
-      onTextbooksChange(
-        textbooks.map((t) => (t.id === id ? { ...t, title: updated.title } : t))
+      const updated = await updateBook(id, { title: editTitle.trim() });
+      onBooksChange(
+        books.map((t) => (t.id === id ? { ...t, title: updated.title } : t))
       );
     } catch {
       setError("Failed to update title");
@@ -66,19 +66,19 @@ export default function TextbookList({
   };
 
   return (
-    <Modal open={open} onClose={onClose} title="Textbooks">
+    <Modal open={open} onClose={onClose} title="Books">
       <div className="space-y-4">
         <div className="text-xs text-macos-text-secondary mb-2">
-          Upload textbook PDFs to extract evidence quotes for your essay.
+          Upload book PDFs to extract evidence quotes for your essay.
         </div>
 
-        {textbooks.length === 0 ? (
+        {books.length === 0 ? (
           <div className="text-xs text-macos-text-secondary py-2">
-            No textbooks uploaded yet.
+            No books uploaded yet.
           </div>
         ) : (
           <div className="space-y-1 max-h-60 overflow-y-auto">
-            {textbooks.map((t) => (
+            {books.map((t) => (
               <div
                 key={t.id}
                 className="flex items-center justify-between px-2 py-1.5 rounded bg-macos-bg text-xs group"
@@ -132,7 +132,7 @@ export default function TextbookList({
           }}
           className="w-full py-2 rounded text-xs font-medium border border-dashed border-macos-border text-macos-text-secondary hover:border-macos-accent hover:text-macos-accent transition-colors"
         >
-          + Upload Textbook
+          + Upload Book
         </button>
 
         {error && (

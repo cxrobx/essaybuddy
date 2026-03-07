@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from services.sandbox import set_data_root
-from routers import essays, samples, profiles, ai, ai_detection, textbooks, evidence, research
+from routers import essays, samples, profiles, ai, ai_detection, books, evidence, research, web_sources
 
 DATA_ROOT = os.environ.get("DATA_ROOT", "../data")
 API_PORT = int(os.environ.get("API_PORT", 8002))
@@ -28,9 +28,10 @@ app.include_router(samples.router)
 app.include_router(profiles.router)
 app.include_router(ai.router)
 app.include_router(ai_detection.router)
-app.include_router(textbooks.router)
+app.include_router(books.router)
 app.include_router(evidence.router)
 app.include_router(research.router)
+app.include_router(web_sources.router)
 
 
 @app.on_event("startup")

@@ -71,7 +71,7 @@ export default function EvidenceCard({
       </div>
 
       <div className="text-[10px] text-macos-text-secondary truncate">
-        {item.textbook_title}
+        {item.source_title}
       </div>
 
       {item.relevance && (

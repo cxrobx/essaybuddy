@@ -9,7 +9,7 @@ from fastapi import HTTPException
 
 _data_root: Optional[Path] = None
 
-WRITE_ALLOWED_DIRS = {"essays", "samples", "profiles", "textbooks", "evidence", "research"}
+WRITE_ALLOWED_DIRS = {"essays", "samples", "profiles", "textbooks", "books", "evidence", "research", "web_sources"}
 
 
 def set_data_root(path: str) -> None:
@@ -19,8 +19,10 @@ def set_data_root(path: str) -> None:
         (_data_root / d).mkdir(parents=True, exist_ok=True)
     (_data_root / "samples" / "files").mkdir(parents=True, exist_ok=True)
     (_data_root / "textbooks" / "files").mkdir(parents=True, exist_ok=True)
+    (_data_root / "books" / "files").mkdir(parents=True, exist_ok=True)
     (_data_root / "evidence").mkdir(parents=True, exist_ok=True)
     (_data_root / "research" / "papers").mkdir(parents=True, exist_ok=True)
+    (_data_root / "web_sources").mkdir(parents=True, exist_ok=True)
 
 
 def data_root() -> Path:

@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from services.sandbox import data_root
 from services.ai_provider import get_provider, get_provider_name, set_provider_name
+from config.writing_types import get_writing_type
 
 _HUMANIZE_PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "humanize.md"
 
@@ -48,6 +49,7 @@ class GenerateOutlineRequest(BaseModel):
     instructions: Optional[str] = None
     target_word_count: Optional[int] = None
     essay_id: Optional[str] = None
+    writing_type: Optional[str] = None
 
 
 class ExpandSectionRequest(BaseModel):
@@ -81,7 +83,7 @@ class HumanizeRequest(BaseModel):
 class SentenceStartersRequest(BaseModel):
     essay_id: str
     profile_id: str
-    sections: list  # [{title, notes, evidence_items: [{quote, page_number, textbook_title}]}]
+    sections: list  # [{title, notes, evidence_items: [{quote, page_number, source_title}]}]
     topic: Optional[str] = None
     thesis: Optional[str] = None
     citation_style: Optional[str] = None
@@ -105,6 +107,7 @@ class ChatRequest(BaseModel):
     topic: Optional[str] = None
     thesis: Optional[str] = None
     outline_summary: Optional[str] = None
+    writing_type: Optional[str] = None
 
 
 class ProviderUpdate(BaseModel):
@@ -326,25 +329,34 @@ def _voice_directive(profile: dict) -> str:
     return "Match the writing style described above."
 
 
-def _build_essay_briefing(
+def _build_writing_briefing(
     topic: Optional[str] = None,
     thesis: Optional[str] = None,
     target_word_count: Optional[int] = None,
     instructions: Optional[str] = None,
+    writing_type: str = "essay",
+    extra_fields: Optional[dict] = None,
 ) -> str:
-    """Build an essay briefing block to inject into AI prompts."""
+    """Build a writing briefing block to inject into AI prompts."""
+    type_cfg = get_writing_type(writing_type)
     parts = []
     if topic:
         parts.append(f"Topic: {topic}")
-    if thesis:
+    if thesis and type_cfg.has_thesis:
         parts.append(f"Thesis: {thesis}")
     if target_word_count:
         parts.append(f"Target length: ~{target_word_count} words")
     if instructions:
         parts.append(f"Author instructions: {instructions}")
+    if extra_fields and type_cfg.extra_briefing_fields:
+        for field_name in type_cfg.extra_briefing_fields:
+            val = extra_fields.get(field_name)
+            if val:
+                parts.append(f"{field_name.capitalize()}: {val}")
     if not parts:
         return ""
-    return "<essay-briefing>\n" + "\n".join(parts) + "\n</essay-briefing>"
+    tag = f"{type_cfg.content_noun}-briefing"
+    return f"<{tag}>\n" + "\n".join(parts) + f"\n</{tag}>"
 
 
 @router.post("/generate-outline")
@@ -371,7 +383,18 @@ async def generate_outline(body: GenerateOutlineRequest):
             catalog_lines.append("</available-papers>")
             paper_catalog_block = "\n".join(catalog_lines)
 
-    briefing = _build_essay_briefing(body.topic, body.thesis, body.target_word_count, body.instructions)
+    # Resolve writing type: request > essay frontmatter > default
+    writing_type = body.writing_type
+    extra_fields = None
+    if not writing_type and body.essay_id:
+        essay_path = data_root() / "essays" / f"{body.essay_id}.md"
+        if essay_path.exists():
+            _meta = frontmatter.loads(essay_path.read_text(encoding="utf-8")).metadata
+            writing_type = _meta.get("writing_type", "essay")
+            extra_fields = _meta.get("extra_fields")
+    type_cfg = get_writing_type(writing_type)
+
+    briefing = _build_writing_briefing(body.topic, body.thesis, body.target_word_count, body.instructions, writing_type=writing_type or "essay", extra_fields=extra_fields)
     directive = _voice_directive(profile) + _citation_directive(body.citation_style)
 
     # Build schema instruction — include paper_ids field if papers available
@@ -387,10 +410,10 @@ async def generate_outline(body: GenerateOutlineRequest):
 {briefing}
 {paper_catalog_block}
 
-Generate a detailed essay outline for the following topic. {directive}
+{type_cfg.outline_instruction} {directive}
 
 Topic: {body.topic}
-{f"Thesis: {body.thesis}" if body.thesis else ""}
+{f"Thesis: {body.thesis}" if body.thesis and type_cfg.has_thesis else ""}
 
 Return a JSON array of sections. Each section should have:
 {schema_fields}
@@ -449,21 +472,27 @@ async def expand_section(body: ExpandSectionRequest):
         if not essay_target:
             essay_target = meta.get("target_word_count")
 
-    briefing = _build_essay_briefing(
+    writing_type = meta.get("writing_type", "essay")
+    extra_fields = meta.get("extra_fields")
+    type_cfg = get_writing_type(writing_type)
+
+    briefing = _build_writing_briefing(
         meta.get("topic"),
         meta.get("thesis"),
         essay_target,
         essay_instructions,
+        writing_type=writing_type,
+        extra_fields=extra_fields,
     )
 
     # Build evidence context if provided
     evidence_ctx = ""
     if body.evidence_items:
-        ev_lines = ["<evidence>", "## Textbook Evidence (integrate these quotes naturally with proper citations)"]
+        ev_lines = ["<evidence>", "## Source Evidence (integrate these quotes naturally with proper citations)"]
         for ev in body.evidence_items:
             quote = ev.get("quote", "")
             page = ev.get("page_number", "")
-            title = ev.get("textbook_title", "")
+            title = ev.get("source_title", "") or ev.get("textbook_title", "")
             relevance = ev.get("relevance", "")
             ev_lines.append(f'- "{quote}" (p. {page}, {title})')
             if relevance:
@@ -485,12 +514,12 @@ async def expand_section(body: ExpandSectionRequest):
 {research_ctx}
 {essay_context}
 
-Expand the following essay section into well-written paragraphs. {directive}
+{type_cfg.expand_instruction} {directive}
 
-Section: {body.section_title}
+{type_cfg.section_noun.capitalize()}: {body.section_title}
 {f"Notes: {body.section_notes}" if body.section_notes else ""}
 
-Write 2-3 paragraphs for this section. Return ONLY the essay text, no headings or metadata."""
+Write 2-3 paragraphs for this {type_cfg.section_noun}. Return ONLY the text, no headings or metadata."""
 
     provider = get_provider()
     try:
@@ -507,7 +536,17 @@ async def sentence_starters(body: SentenceStartersRequest):
     style_ctx = _build_style_context(profile)
     samples_ctx = _load_sample_excerpts()
 
-    briefing = _build_essay_briefing(body.topic, body.thesis, instructions=body.instructions)
+    # Resolve writing type from essay frontmatter
+    writing_type = "essay"
+    extra_fields = None
+    essay_path = data_root() / "essays" / f"{body.essay_id}.md"
+    if essay_path.exists():
+        _meta = frontmatter.loads(essay_path.read_text(encoding="utf-8")).metadata
+        writing_type = _meta.get("writing_type", "essay")
+        extra_fields = _meta.get("extra_fields")
+    type_cfg = get_writing_type(writing_type)
+
+    briefing = _build_writing_briefing(body.topic, body.thesis, instructions=body.instructions, writing_type=writing_type, extra_fields=extra_fields)
     directive = _voice_directive(profile) + _citation_directive(body.citation_style)
 
     # Build section listing with evidence and research papers
@@ -524,8 +563,8 @@ async def sentence_starters(body: SentenceStartersRequest):
             for ev in ev_items:
                 quote = ev.get("quote", "")
                 page = ev.get("page_number", "")
-                tb_title = ev.get("textbook_title", "")
-                section_lines.append(f'  - "{quote}" (p. {page}, {tb_title})')
+                src_title = ev.get("source_title", "") or ev.get("textbook_title", "")
+                section_lines.append(f'  - "{quote}" (p. {page}, {src_title})')
         sec_paper_ids = sec.get("paper_ids", [])
         if sec_paper_ids:
             sec_research = _load_research_papers_by_ids(sec_paper_ids)
@@ -540,7 +579,7 @@ async def sentence_starters(body: SentenceStartersRequest):
 {samples_ctx}
 {briefing}
 
-Generate 3 sentence starters for each of the following essay sections. {directive}
+Generate 3 sentence starters for each of the following {type_cfg.section_noun}s. {directive}
 
 CRITICAL: Each sentence starter must include parenthetical references with the evidence, source info, and any context the writer needs to complete the sentence. For example:
 - "While many scholars have debated the causes of X (Smith, p.42 notes that '...'; see also Johnson's analysis of...), "
@@ -777,11 +816,11 @@ def _build_evidence_context(items: list) -> str:
     """Build evidence XML block from a list of evidence items."""
     if not items:
         return ""
-    lines = ["<evidence>", "## Textbook Evidence (integrate these quotes naturally with proper citations)"]
+    lines = ["<evidence>", "## Source Evidence (integrate these quotes naturally with proper citations)"]
     for ev in items:
         quote = ev.get("quote", "")
         page = ev.get("page_number", "")
-        title = ev.get("textbook_title", "")
+        title = ev.get("source_title", "") or ev.get("textbook_title", "")
         relevance = ev.get("relevance", "")
         lines.append(f'- "{quote}" (p. {page}, {title})')
         if relevance:
@@ -831,7 +870,11 @@ async def generate_full_essay(body: GenerateFullEssayRequest):
     research_ctx = _format_papers_xml(all_essay_papers[:MAX_RESEARCH_PAPERS])
     all_evidence = _load_evidence_for_essay(body.essay_id)
 
-    briefing = _build_essay_briefing(topic, thesis, target_word_count, instructions)
+    writing_type = meta.get("writing_type", "essay")
+    extra_fields = meta.get("extra_fields")
+    type_cfg = get_writing_type(writing_type)
+
+    briefing = _build_writing_briefing(topic, thesis, target_word_count, instructions, writing_type=writing_type, extra_fields=extra_fields)
     directive = _voice_directive(profile) + _citation_directive(citation_style)
 
     # Full outline overview
@@ -848,7 +891,7 @@ async def generate_full_essay(body: GenerateFullEssayRequest):
 
     for i, section in enumerate(outline):
         section_id = section.get("id", "")
-        section_title = section.get("title", f"Section {i+1}")
+        section_title = section.get("title", f"{type_cfg.section_noun.capitalize()} {i+1}")
         section_notes = section.get("notes", "")
 
         # Filter evidence for this section
@@ -888,9 +931,9 @@ async def generate_full_essay(body: GenerateFullEssayRequest):
         # Section position guidance
         position_guidance = ""
         if i == 0:
-            position_guidance = "This is the INTRODUCTION. Open with a hook, introduce the topic, and present the thesis."
+            position_guidance = type_cfg.intro_guidance
         elif i == total - 1:
-            position_guidance = "This is the CONCLUSION. Summarize key arguments, restate the thesis in a new way, and end with a compelling closing thought."
+            position_guidance = type_cfg.conclusion_guidance
 
         prompt = f"""{style_ctx}
 
@@ -901,18 +944,18 @@ async def generate_full_essay(body: GenerateFullEssayRequest):
 {prev_summary}
 
 <outline-overview>
-Full essay structure:
+Full {type_cfg.content_noun} structure:
 {outline_overview}
 </outline-overview>
 
-Write section {i+1} of {total}: "{section_title}"
+Write {type_cfg.section_noun} {i+1} of {total}: "{section_title}"
 Notes: {section_notes}
 
 {directive}
 
-Write 2-4 paragraphs. Maintain continuity with previous sections.
+Write 2-4 paragraphs. Maintain continuity with previous {type_cfg.section_noun}s.
 {position_guidance}
-Return ONLY the essay text, no headings or metadata."""
+Return ONLY the text, no headings or metadata."""
 
         try:
             result = await provider.generate(prompt)
@@ -982,17 +1025,20 @@ def _build_chat_prompt(body: ChatRequest) -> str:
             content = content.rsplit(" ", 1)[0] + "\n[...truncated]"
         parts.append(f"<current-essay>\n{content}\n</current-essay>")
 
-    # System instructions
-    parts.append("""You are Zora, an essay writing assistant. The user is asking for help with their essay.
+    # Resolve writing type for chat system role
+    type_cfg = get_writing_type(body.writing_type)
 
-When you suggest edits to the essay, wrap each edit in XML tags like this:
+    # System instructions
+    parts.append(f"""{type_cfg.chat_system_role} The user is asking for help with their {type_cfg.content_noun}.
+
+When you suggest edits, wrap each edit in XML tags like this:
 <edit>
-<find>exact text to find in the essay</find>
+<find>exact text to find in the {type_cfg.content_noun}</find>
 <replace>replacement text</replace>
 </edit>
 
 You can include multiple <edit> blocks in a single response. Include them naturally within your prose explanation.
-The <find> text must be an exact substring of the current essay content.
+The <find> text must be an exact substring of the current content.
 Keep your responses concise and helpful. Focus on the user's specific request.""")
 
     parts.append(body.message)

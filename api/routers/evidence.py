@@ -1,4 +1,5 @@
 """Evidence extraction and management."""
+# Supports both book and legacy textbook terminology for backward compat.
 import json
 import re
 import uuid
@@ -27,13 +28,21 @@ class ChapterSpec(BaseModel):
 
 class ExtractEvidenceRequest(BaseModel):
     essay_id: str
-    textbook_id: str
+    book_id: Optional[str] = None
+    textbook_id: Optional[str] = None  # backward compat alias for book_id
     chapter: ChapterSpec
     topic: Optional[str] = None
     thesis: Optional[str] = None
     num_quotes: int = 5
     profile_id: Optional[str] = None
     citation_style: Optional[str] = None
+
+    @property
+    def resolved_book_id(self) -> str:
+        bid = self.book_id or self.textbook_id
+        if not bid:
+            raise ValueError("book_id is required")
+        return bid
 
 
 class AssignRequest(BaseModel):
@@ -49,8 +58,8 @@ def _evidence_dir() -> Path:
     return data_root() / "evidence"
 
 
-def _textbooks_dir() -> Path:
-    return data_root() / "textbooks"
+def _books_dir() -> Path:
+    return data_root() / "books"
 
 
 def _load_evidence_file(essay_id: str) -> dict:
@@ -108,7 +117,7 @@ def _resolve_chapter_text(pages: list[dict], chapter: ChapterSpec) -> str:
         if start_idx is None:
             raise HTTPException(
                 status_code=422,
-                detail=f"Chapter heading '{ref}' not found in textbook. Try specifying page numbers instead.",
+                detail=f"Chapter heading '{ref}' not found in book. Try specifying page numbers instead.",
             )
 
         # Find next chapter heading (look for common chapter patterns)
@@ -142,13 +151,19 @@ def _resolve_chapter_text(pages: list[dict], chapter: ChapterSpec) -> str:
 
 @router.post("/extract")
 async def extract_evidence(body: ExtractEvidenceRequest):
-    # Load textbook
-    tb_path = _textbooks_dir() / f"{body.textbook_id}.json"
-    if not tb_path.exists():
-        raise HTTPException(status_code=404, detail="Textbook not found")
+    # Resolve book_id (accepts both book_id and textbook_id)
+    try:
+        book_id = body.resolved_book_id
+    except ValueError:
+        raise HTTPException(status_code=422, detail="book_id is required")
 
-    tb_data = json.loads(tb_path.read_text(encoding="utf-8"))
-    pages = tb_data.get("pages", [])
+    # Load book
+    bk_path = _books_dir() / f"{book_id}.json"
+    if not bk_path.exists():
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    bk_data = json.loads(bk_path.read_text(encoding="utf-8"))
+    pages = bk_data.get("pages", [])
 
     # Resolve chapter text
     chapter_text = _resolve_chapter_text(pages, body.chapter)
@@ -165,11 +180,11 @@ async def extract_evidence(body: ExtractEvidenceRequest):
 
     prompt = f"""{system_prompt}
 
-<textbook-chapter>
-Source: {tb_data.get('title', tb_data.get('filename', 'Unknown'))}
+<source-chapter>
+Source: {bk_data.get('title', bk_data.get('filename', 'Unknown'))}
 
 {chapter_text}
-</textbook-chapter>
+</source-chapter>
 {topic_line}{thesis_line}{cite_line}
 
 Extract {body.num_quotes} pieces of citable evidence from this chapter.
@@ -202,8 +217,9 @@ Return ONLY the JSON array."""
         ev_id = "ev_" + str(uuid.uuid4())[:8]
         new_items.append({
             "id": ev_id,
-            "textbook_id": body.textbook_id,
-            "textbook_title": tb_data.get("title", tb_data.get("filename", "")),
+            "book_id": book_id,
+            "source_title": bk_data.get("title", bk_data.get("filename", "")),
+            "source_type": "book",
             "quote": item.get("quote", ""),
             "page_number": item.get("page_number"),
             "context": item.get("context", ""),

@@ -22,6 +22,8 @@ export type Essay = {
   citation_style?: CitationStyle;
   target_word_count?: number | null;
   instructions?: string;
+  writing_type?: string;
+  extra_fields?: Record<string, string>;
   ai_checks?: AIDetectionResult[];
   created_at: string;
   updated_at: string;
@@ -31,6 +33,7 @@ export type EssayListItem = {
   id: string;
   title: string;
   topic?: string;
+  writing_type?: string;
   word_count: number;
   updated_at: string;
   created_at: string;
@@ -148,24 +151,43 @@ export type AIDetectionHistoryItem = {
   checks: AIDetectionResult[];
 };
 
-export type Textbook = {
+export type Book = {
   id: string;
   filename: string;
   title: string;
+  author?: string;
+  publisher?: string;
+  year?: number;
+  edition?: string;
+  isbn?: string;
+  editors?: string;
+  city?: string;
   page_count: number;
   total_chars: number;
   created_at: string;
 };
 
-export type TextbookDetail = Textbook & {
+export type BookDetail = Book & {
   pages: { page: number; text: string }[];
   raw_file: string;
 };
 
+export type WebSource = {
+  id: string;
+  url: string;
+  title: string;
+  author?: string;
+  date_published?: string;
+  site_name?: string;
+  description?: string;
+  accessed_at: string;
+  essay_ids: string[];
+};
+
 export type EvidenceItem = {
   id: string;
-  textbook_id: string;
-  textbook_title: string;
+  book_id: string;
+  source_title: string;
   quote: string;
   page_number: number;
   context: string;
@@ -187,7 +209,7 @@ export type ChapterSpec = {
 
 export type ExtractEvidenceRequest = {
   essay_id: string;
-  textbook_id: string;
+  book_id: string;
   chapter: ChapterSpec;
   topic?: string;
   thesis?: string;

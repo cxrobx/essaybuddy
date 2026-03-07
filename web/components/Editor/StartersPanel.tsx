@@ -17,6 +17,7 @@ export default function StartersPanel({
   outlineSections,
   evidenceItems,
   onInsertText,
+  sectionNoun = "Section",
 }: {
   open: boolean;
   onClose: () => void;
@@ -29,6 +30,7 @@ export default function StartersPanel({
   outlineSections: OutlineSection[];
   evidenceItems: EvidenceItem[];
   onInsertText: (text: string) => void;
+  sectionNoun?: string;
 }) {
   const [starters, setStarters] = useState<SentenceStarterSection[]>([]);
   const [loading, setLoading] = useState(false);
@@ -51,7 +53,7 @@ export default function StartersPanel({
           .map((ev) => ({
             quote: ev.quote,
             page_number: ev.page_number,
-            textbook_title: ev.textbook_title,
+            source_title: ev.source_title,
           }));
         return {
           title: sec.title,
@@ -103,7 +105,7 @@ export default function StartersPanel({
         {!canGenerate ? (
           <p className="text-[11px] text-macos-text-secondary">
             {outlineSections.length === 0
-              ? "Add outline sections first"
+              ? `Add ${sectionNoun.toLowerCase()}s first`
               : "No profile assigned"}
           </p>
         ) : loading ? (
