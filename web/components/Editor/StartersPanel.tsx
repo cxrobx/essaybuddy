@@ -197,7 +197,7 @@ function GeneratingProgress() {
         />
       </div>
       <p className="text-[10px] text-macos-text-secondary text-center">
-        Generating{"\u2026"} ~{secsLeft}s remaining
+        Generating{"\u2026"} usually 60–90s
       </p>
     </div>
   );
