@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { TourProvider } from "@/lib/useTour";
 
 export const metadata: Metadata = {
   title: "Zora",
@@ -20,7 +21,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
       </head>
-      <body>{children}</body>
+      <body>
+        <TourProvider>{children}</TourProvider>
+      </body>
     </html>
   );
 }

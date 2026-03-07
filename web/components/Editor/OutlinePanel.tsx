@@ -177,7 +177,7 @@ export default function OutlinePanel({
   };
 
   return (
-    <aside className="flex-shrink-0 bg-macos-surface border-r border-macos-border flex flex-col overflow-hidden relative" style={{ width: panelWidth }}>
+    <aside className="flex-shrink-0 bg-macos-surface border-r border-macos-border flex flex-col overflow-hidden relative" data-tour="outline-panel" style={{ width: panelWidth }}>
       <div className="flex items-center justify-between px-3 py-2 border-b border-macos-border">
         <span className="text-xs font-semibold uppercase tracking-widest text-macos-text-secondary">
           {outlineNoun}

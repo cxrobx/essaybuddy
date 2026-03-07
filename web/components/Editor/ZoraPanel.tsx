@@ -100,7 +100,7 @@ export default function ZoraPanel({
   const { width: panelWidth, handleMouseDown } = useResizablePanel(320, "right");
 
   return (
-    <div className="flex-shrink-0 flex flex-col border-l border-macos-border overflow-hidden relative" style={{ width: panelWidth }}>
+    <div className="flex-shrink-0 flex flex-col border-l border-macos-border overflow-hidden relative" data-tour="zora-panel" style={{ width: panelWidth }}>
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-macos-border bg-macos-surface">
         <span className="text-xs font-semibold uppercase tracking-widest text-macos-accent">

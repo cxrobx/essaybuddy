@@ -29,7 +29,7 @@ export default function Toolbar({
   );
 
   return (
-    <div className="flex items-center gap-1 px-3 py-2 border-b border-macos-border bg-macos-surface flex-wrap">
+    <div className="flex items-center gap-1 px-3 py-2 border-b border-macos-border bg-macos-surface flex-wrap" data-tour="toolbar">
       {btn("B", () => editor.chain().focus().toggleBold().run(), editor.isActive("bold"))}
       {btn("I", () => editor.chain().focus().toggleItalic().run(), editor.isActive("italic"))}
       {btn("U", () => editor.chain().focus().toggleUnderline().run(), editor.isActive("underline"))}
@@ -50,6 +50,7 @@ export default function Toolbar({
 
       <button
         onClick={onAIClick}
+        data-tour="zora-toggle"
         className="px-3 py-1 rounded text-xs font-medium bg-macos-accent hover:bg-macos-accent-hover text-white transition-colors flex items-center gap-1"
       >
         Zora <span className="text-[10px]">&#9734;</span>

@@ -20,6 +20,8 @@ import Toolbar from "./Toolbar";
 import ZoraPanel from "./ZoraPanel";
 import { useTheme } from "@/lib/useTheme";
 import { useCustomActions } from "@/lib/useCustomActions";
+import { useTour } from "@/lib/useTour";
+import { SpotlightTour } from "@/components/tour/SpotlightTour";
 import StatusBadge from "@/components/ui/StatusBadge";
 import ProfileCreator from "@/components/Samples/ProfileCreator";
 import BookUploadModal from "@/components/Books/BookUploadModal";
@@ -70,6 +72,7 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
   const { theme, toggleTheme } = useTheme();
   const { actions: customActions, addAction: addCustomAction, updateAction: updateCustomAction, deleteAction: deleteCustomAction } = useCustomActions();
   const { status, scheduleSave, saveNow } = useAutoSave(essay?.id ?? null);
+  const { showTour, startTour, dismissTour, permanentlyDismiss } = useTour();
 
   // Load or create essay on mount
   useEffect(() => {
@@ -639,9 +642,17 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
           <span className="font-serif font-semibold text-sm tracking-tight text-macos-text">
             &#9998; Zora
           </span>
+          <button
+            onClick={startTour}
+            className="w-5 h-5 rounded-full border border-macos-border text-macos-text-secondary hover:text-macos-text hover:border-macos-accent text-[10px] font-medium transition-colors flex items-center justify-center"
+            title="Take a tour"
+          >
+            ?
+          </button>
           {writingType.showOutlinePanel && (
             <button
               onClick={() => setOutlineOpen(!outlineOpen)}
+              data-tour="outline-toggle"
               className={`px-3 py-1 rounded-full text-xs font-medium border border-macos-border hover:border-macos-accent transition-colors ${
                 outlineOpen
                   ? "text-macos-accent"
@@ -660,6 +671,7 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
         <div className="flex justify-center">
           <button
             onClick={() => setWritingPlanOpen(true)}
+            data-tour="writing-plan"
             className="px-3 py-1 rounded-full text-xs font-semibold border border-macos-accent/50 bg-macos-accent/10 text-macos-accent hover:bg-macos-accent/20 transition-colors"
           >
             Writing Plan
@@ -670,6 +682,7 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
           {writingType.showSourcesPanel && (
             <button
               onClick={() => setSourcesOpen(!sourcesOpen)}
+              data-tour="sources-btn"
               className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
                 sourcesOpen
                   ? "border-macos-accent text-macos-accent"
@@ -682,6 +695,7 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
           {writingType.showResearchPanel && (
             <button
               onClick={() => setResearchOpen(!researchOpen)}
+              data-tour="research-btn"
               className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
                 researchOpen
                   ? "border-macos-accent text-macos-accent"
@@ -694,6 +708,7 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
           <div className="relative" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setExportOpen(false); }}>
             <button
               onClick={() => setExportOpen(!exportOpen)}
+              data-tour="export-btn"
               className="px-3 py-1 rounded-full text-xs font-medium border border-macos-border hover:border-macos-accent text-macos-text-secondary hover:text-macos-text transition-colors"
               title="Export document"
             >
@@ -798,7 +813,7 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
         <SectionNav editor={editorInstance} scrollContainer={scrollContainer} sectionNoun={writingType.sectionNoun + "s"} />
 
         {/* Editor area */}
-        <div className="flex flex-col flex-1 overflow-hidden">
+        <div className="flex flex-col flex-1 overflow-hidden" data-tour="editor-area">
           <Toolbar
             editor={editorInstance}
             onAIClick={() => setAiOpen(!aiOpen)}
@@ -943,6 +958,14 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
         />
       )}
       <UploadToast items={uploadToasts} onDismiss={dismissUploadToast} />
+
+      {showTour && (
+        <SpotlightTour
+          onDismiss={dismissTour}
+          onFinish={permanentlyDismiss}
+          onPermanentDismiss={permanentlyDismiss}
+        />
+      )}
     </div>
   );
 }

@@ -181,3 +181,20 @@ body {
 .bubble-score-result {
   animation: bubble-fade-in 0.2s ease-out;
 }
+
+/* Tour animations — gentle, calm transitions */
+@keyframes tour-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.tour-fade-in {
+  animation: tour-fade-in 0.3s ease-in-out;
+}
+
+@keyframes tour-crossfade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.tour-crossfade {
+  animation: tour-crossfade 0.25s ease;
+}

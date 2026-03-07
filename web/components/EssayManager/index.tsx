@@ -8,6 +8,8 @@ import { getWritingType, WRITING_TYPE_CATEGORIES, getCategoryForType } from "@/l
 import type { WritingCategory } from "@/lib/writingTypes";
 import EssayCard from "./EssayCard";
 import NewDocumentModal from "@/components/NewDocumentModal";
+import { useTour } from "@/lib/useTour";
+import { SpotlightTour } from "@/components/tour/SpotlightTour";
 
 export default function EssayManager() {
   const router = useRouter();
@@ -16,6 +18,7 @@ export default function EssayManager() {
   const [error, setError] = useState("");
   const [newDocOpen, setNewDocOpen] = useState(false);
   const [filter, setFilter] = useState<"all" | WritingCategory>("all");
+  const { showTour, startTour, dismissTour, permanentlyDismiss } = useTour();
 
   useEffect(() => {
     (async () => {
@@ -64,11 +67,21 @@ export default function EssayManager() {
       <div className="max-w-5xl mx-auto px-6 py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
-          <span className="font-serif font-semibold text-lg tracking-tight text-macos-text">
-            &#9998; Zora
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="font-serif font-semibold text-lg tracking-tight text-macos-text">
+              &#9998; Zora
+            </span>
+            <button
+              onClick={startTour}
+              className="w-5 h-5 rounded-full border border-macos-border text-macos-text-secondary hover:text-macos-text hover:border-macos-accent text-[10px] font-medium transition-colors flex items-center justify-center"
+              title="Take a tour"
+            >
+              ?
+            </button>
+          </div>
           <button
             onClick={() => setNewDocOpen(true)}
+            data-tour="new-document"
             className="px-4 py-2 rounded-lg text-sm font-medium bg-macos-accent text-white hover:bg-macos-accent/90 transition-colors"
           >
             New
@@ -83,7 +96,7 @@ export default function EssayManager() {
 
         {/* Filter tabs */}
         {essays.length > 0 && (
-          <div className="flex gap-1 mb-4">
+          <div className="flex gap-1 mb-4" data-tour="filter-tabs">
             <button
               onClick={() => setFilter("all")}
               className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
@@ -143,6 +156,14 @@ export default function EssayManager() {
         onClose={() => setNewDocOpen(false)}
         onCreated={handleDocumentCreated}
       />
+
+      {showTour && (
+        <SpotlightTour
+          onDismiss={dismissTour}
+          onFinish={permanentlyDismiss}
+          onPermanentDismiss={permanentlyDismiss}
+        />
+      )}
     </div>
   );
 }
