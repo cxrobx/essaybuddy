@@ -1,11 +1,68 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import type { OutlineSection, EvidenceItem, SavedPaper } from "@/lib/types";
 import { uploadOutline } from "@/lib/api";
 import EvidenceCard from "@/components/Evidence/EvidenceCard";
 import Modal from "@/components/ui/Modal";
 import { useResizablePanel } from "@/lib/useResizablePanel";
+
+function useSectionWordCounts(
+  editorInstance: any,
+  sections: OutlineSection[]
+): Map<string, number> {
+  const [counts, setCounts] = useState<Map<string, number>>(new Map());
+
+  useEffect(() => {
+    if (!editorInstance || editorInstance.isDestroyed || sections.length === 0) {
+      setCounts(new Map());
+      return;
+    }
+
+    const compute = () => {
+      const doc = editorInstance.state.doc;
+      // Find heading positions mapped to section titles
+      const headingPositions: { title: string; pos: number }[] = [];
+      doc.descendants((node: any, pos: number) => {
+        if (node.type.name === "heading") {
+          headingPositions.push({ title: node.textContent.trim(), pos });
+        }
+      });
+
+      const newCounts = new Map<string, number>();
+      for (const section of sections) {
+        const headingIdx = headingPositions.findIndex(
+          (h) => h.title === section.title
+        );
+        if (headingIdx === -1) continue;
+
+        const startPos = headingPositions[headingIdx].pos;
+        const endPos =
+          headingIdx + 1 < headingPositions.length
+            ? headingPositions[headingIdx + 1].pos
+            : doc.content.size;
+
+        let text = "";
+        doc.nodesBetween(startPos, endPos, (node: any) => {
+          if (node.isTextblock && node.type.name !== "heading") {
+            text += node.textContent + " ";
+          }
+        });
+        const words = text.trim().split(/\s+/).filter(Boolean).length;
+        newCounts.set(section.id, words);
+      }
+      setCounts(newCounts);
+    };
+
+    compute();
+    editorInstance.on("update", compute);
+    return () => {
+      editorInstance.off("update", compute);
+    };
+  }, [editorInstance, sections]);
+
+  return counts;
+}
 
 export default function OutlinePanel({
   sections,
@@ -26,6 +83,10 @@ export default function OutlinePanel({
   savedPapers,
   onAssignPaper,
   onUnassignPaper,
+  sectionNoun = "Section",
+  outlineNoun = "Outline",
+  editorInstance,
+  targetWordCount,
 }: {
   sections: OutlineSection[];
   onUpdate: (sections: OutlineSection[]) => void;
@@ -45,6 +106,10 @@ export default function OutlinePanel({
   savedPapers?: SavedPaper[];
   onAssignPaper?: (sectionId: string, paperId: string) => void;
   onUnassignPaper?: (sectionId: string, paperId: string) => void;
+  sectionNoun?: string;
+  outlineNoun?: string;
+  editorInstance?: any;
+  targetWordCount?: number | null;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [assignDropdownId, setAssignDropdownId] = useState<string | null>(null);
@@ -57,6 +122,11 @@ export default function OutlinePanel({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { width: panelWidth, handleMouseDown } = useResizablePanel(320, "left");
+
+  const sectionWordCounts = useSectionWordCounts(editorInstance, sections);
+  const perSectionTarget = targetWordCount && sections.length > 0
+    ? Math.round(targetWordCount / sections.length)
+    : null;
 
   const handleUploadOutline = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -78,7 +148,7 @@ export default function OutlinePanel({
 
   const addSection = () => {
     const id = Math.random().toString(36).slice(2, 8);
-    onUpdate([...sections, { id, title: "New Section", notes: "", evidence: "" }]);
+    onUpdate([...sections, { id, title: `New ${sectionNoun}`, notes: "", evidence: "" }]);
     requestAnimationFrame(() => {
       scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
     });
@@ -110,7 +180,7 @@ export default function OutlinePanel({
     <aside className="flex-shrink-0 bg-macos-surface border-r border-macos-border flex flex-col overflow-hidden relative" style={{ width: panelWidth }}>
       <div className="flex items-center justify-between px-3 py-2 border-b border-macos-border">
         <span className="text-xs font-semibold uppercase tracking-widest text-macos-text-secondary">
-          Outline
+          {outlineNoun}
         </span>
         {onStartersToggle && (
           <button
@@ -164,6 +234,14 @@ export default function OutlinePanel({
                 </span>
               )}
               {(() => {
+                const wc = sectionWordCounts.get(section.id);
+                return wc !== undefined ? (
+                  <span className="text-[9px] text-macos-text-secondary flex-shrink-0 tabular-nums">
+                    {wc}w
+                  </span>
+                ) : null;
+              })()}
+              {(() => {
                 const count = evidenceItems?.filter((e) => e.section_id === section.id).length ?? 0;
                 return count > 0 ? (
                   <span className="w-4 h-4 rounded-full bg-orange-500/20 text-orange-400 text-[9px] font-semibold flex items-center justify-center flex-shrink-0">
@@ -187,6 +265,23 @@ export default function OutlinePanel({
                 &times;
               </button>
             </div>
+
+            {perSectionTarget && (() => {
+              const wc = sectionWordCounts.get(section.id) ?? 0;
+              const pct = Math.min((wc / perSectionTarget) * 100, 100);
+              return (
+                <div className="mx-2 mb-1">
+                  <div className="h-1 rounded-full bg-macos-border overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-[width] duration-300 ${
+                        pct >= 100 ? "bg-macos-success" : "bg-macos-accent"
+                      }`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })()}
 
             {!section.collapsed && (
               <div className="px-3 pb-2 space-y-2">
@@ -280,7 +375,7 @@ export default function OutlinePanel({
                                   &ldquo;{item.quote.length > 60 ? item.quote.slice(0, 60) + "..." : item.quote}&rdquo;
                                 </span>
                                 <span className="text-macos-text-secondary ml-1 not-italic">
-                                  — {item.textbook_title}
+                                  — {item.source_title}
                                 </span>
                               </button>
                             ))}
@@ -476,7 +571,7 @@ export default function OutlinePanel({
             onClick={addSection}
             className="flex-1 px-3 py-1.5 rounded text-xs font-medium text-macos-text-secondary hover:text-macos-text hover:bg-macos-elevated transition-colors border border-dashed border-macos-border"
           >
-            + Add Section
+            + Add {sectionNoun}
           </button>
           <button
             onClick={() => fileInputRef.current?.click()}

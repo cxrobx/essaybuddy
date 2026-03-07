@@ -1,12 +1,15 @@
 """Essay CRUD endpoints — markdown files with YAML frontmatter."""
 import json
+import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 import frontmatter
+import markdown as md_lib
 from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi.responses import Response
 
 from pydantic import BaseModel
 
@@ -24,6 +27,8 @@ class EssayCreate(BaseModel):
     citation_style: Optional[str] = None
     target_word_count: Optional[int] = None
     instructions: Optional[str] = None
+    writing_type: Optional[str] = "essay"
+    extra_fields: Optional[dict] = None
 
 
 class EssayUpdate(BaseModel):
@@ -36,6 +41,8 @@ class EssayUpdate(BaseModel):
     citation_style: Optional[str] = None
     target_word_count: Optional[int] = None
     instructions: Optional[str] = None
+    writing_type: Optional[str] = None
+    extra_fields: Optional[dict] = None
 
 
 def _essays_dir() -> Path:
@@ -72,6 +79,8 @@ def _load_essay(essay_id: str) -> dict:
         "citation_style": meta.get("citation_style"),
         "target_word_count": meta.get("target_word_count"),
         "instructions": meta.get("instructions"),
+        "writing_type": meta.get("writing_type", "essay"),
+        "extra_fields": meta.get("extra_fields"),
         "content": post.content,
         "outline": outline,
         "ai_checks": _load_ai_checks(essay_id),
@@ -92,6 +101,8 @@ def _load_legacy_json(essay_id: str, path: Path) -> dict:
         "citation_style": data.get("citation_style"),
         "target_word_count": data.get("target_word_count"),
         "instructions": data.get("instructions"),
+        "writing_type": data.get("writing_type", "essay"),
+        "extra_fields": data.get("extra_fields"),
         "content": data.get("content", ""),
         "outline": data.get("outline", []),
         "ai_checks": data.get("ai_checks", []),
@@ -103,7 +114,7 @@ def _load_legacy_json(essay_id: str, path: Path) -> dict:
 def _save_essay(essay_id: str, meta: dict, content: str) -> None:
     """Write essay as markdown with YAML frontmatter."""
     post = frontmatter.Post(content)
-    for key in ("title", "topic", "thesis", "profile_id", "citation_style", "target_word_count", "instructions", "created_at", "updated_at"):
+    for key in ("title", "topic", "thesis", "profile_id", "citation_style", "target_word_count", "instructions", "writing_type", "extra_fields", "created_at", "updated_at"):
         if key in meta and meta[key] is not None:
             post.metadata[key] = meta[key]
 
@@ -146,6 +157,7 @@ async def list_essays():
                 "id": essay_id,
                 "title": meta.get("title", "Untitled"),
                 "topic": meta.get("topic"),
+                "writing_type": meta.get("writing_type", "essay"),
                 "word_count": len(post.content.split()) if post.content else 0,
                 "updated_at": meta.get("updated_at"),
                 "created_at": meta.get("created_at"),
@@ -167,6 +179,8 @@ async def create_essay(body: EssayCreate):
         "citation_style": body.citation_style,
         "target_word_count": body.target_word_count,
         "instructions": body.instructions,
+        "writing_type": body.writing_type,
+        "extra_fields": body.extra_fields,
         "created_at": now,
         "updated_at": now,
     }
@@ -185,6 +199,8 @@ async def create_essay(body: EssayCreate):
         "citation_style": body.citation_style,
         "target_word_count": body.target_word_count,
         "instructions": body.instructions,
+        "writing_type": body.writing_type,
+        "extra_fields": body.extra_fields,
         "created_at": now,
         "updated_at": now,
     }
@@ -242,6 +258,89 @@ async def delete_essay(essay_id: str):
     if checks_path.exists():
         checks_path.unlink()
     return {"deleted": True}
+
+
+@router.get("/{essay_id}/export")
+async def export_essay(essay_id: str, format: str = "md"):
+    essay = _load_essay(essay_id)
+    title = essay.get("title", "Untitled")
+    safe_title = re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '_') or "essay"
+    content = essay.get("content", "")
+
+    if format == "md":
+        return Response(
+            content=content.encode("utf-8"),
+            media_type="application/octet-stream",
+            headers={"Content-Disposition": f'attachment; filename="{safe_title}.md"'},
+        )
+    elif format == "html":
+        html_body = md_lib.markdown(content, extensions=["tables", "fenced_code"])
+        html_doc = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{title}</title>
+<style>
+  body {{ max-width: 800px; margin: 2rem auto; padding: 0 1rem; font-family: Georgia, serif; line-height: 1.7; color: #222; }}
+  h1, h2, h3 {{ font-family: -apple-system, sans-serif; }}
+  h1 {{ border-bottom: 2px solid #ddd; padding-bottom: 0.5rem; }}
+  blockquote {{ border-left: 3px solid #ccc; margin-left: 0; padding-left: 1rem; color: #555; }}
+  code {{ background: #f5f5f5; padding: 0.2em 0.4em; border-radius: 3px; font-size: 0.9em; }}
+  pre code {{ display: block; padding: 1rem; overflow-x: auto; }}
+  table {{ border-collapse: collapse; width: 100%; }}
+  th, td {{ border: 1px solid #ddd; padding: 0.5rem; text-align: left; }}
+</style>
+</head>
+<body>
+<h1>{title}</h1>
+{html_body}
+</body>
+</html>"""
+        return Response(
+            content=html_doc.encode("utf-8"),
+            media_type="application/octet-stream",
+            headers={"Content-Disposition": f'attachment; filename="{safe_title}.html"'},
+        )
+    elif format == "fountain":
+        writing_type = essay.get("writing_type", "essay")
+        if writing_type != "screenplay":
+            raise HTTPException(status_code=400, detail="Fountain export is only available for screenplay documents")
+        # Convert markdown to Fountain format
+        lines = content.split("\n")
+        fountain_lines = []
+        for line in lines:
+            stripped = line.strip()
+            # ## headings become scene headings (uppercase)
+            if stripped.startswith("## "):
+                scene = stripped[3:].upper()
+                fountain_lines.append("")
+                fountain_lines.append(scene)
+            elif stripped.startswith("# "):
+                fountain_lines.append("")
+                fountain_lines.append(f">{stripped[2:].upper()}<")
+            elif stripped.startswith("**") and stripped.endswith("**"):
+                # Bold text as character name (uppercase)
+                name = stripped.strip("*").upper()
+                fountain_lines.append("")
+                fountain_lines.append(name)
+            elif stripped.startswith("_") and stripped.endswith("_"):
+                # Italic as parenthetical
+                paren = stripped.strip("_")
+                fountain_lines.append(f"({paren})")
+            elif stripped.startswith("> "):
+                # Blockquote as transition
+                fountain_lines.append("")
+                fountain_lines.append(f">{stripped[2:].upper()}")
+            else:
+                fountain_lines.append(line)
+        fountain_text = "\n".join(fountain_lines)
+        return Response(
+            content=fountain_text.encode("utf-8"),
+            media_type="application/octet-stream",
+            headers={"Content-Disposition": f'attachment; filename="{safe_title}.fountain"'},
+        )
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported format: {format}. Use md, html, or fountain.")
 
 
 ALLOWED_OUTLINE_MIMES = {

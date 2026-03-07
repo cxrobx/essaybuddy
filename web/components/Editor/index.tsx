@@ -4,15 +4,16 @@ import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import {
   createEssay, getEssay, listEssays, listSamples, listProfiles, getProfile, updateEssay,
-  listTextbooks, uploadTextbook, getEvidence, assignEvidence as apiAssignEvidence,
+  listBooks, uploadBook, listWebSources, getEvidence, assignEvidence as apiAssignEvidence,
   unassignEvidence as apiUnassignEvidence, deleteEvidence as apiDeleteEvidence,
   generateOutline, detectAIPatterns, getAIDetectionHistory,
   rephraseText, humanizeText, getStyleScore, rewriteText,
-  listSavedPapers, linkPaperToEssay,
+  listSavedPapers, linkPaperToEssay, exportEssay,
 } from "@/lib/api";
 import { useAutoSave } from "@/lib/useAutoSave";
-import type { Essay, OutlineSection, SaveStatus, StyleMetrics, Textbook, EvidenceItem, AIDetectionResult, SavedPaper } from "@/lib/types";
+import type { Essay, OutlineSection, SaveStatus, StyleMetrics, Book, WebSource, EvidenceItem, AIDetectionResult, SavedPaper } from "@/lib/types";
 import Link from "next/link";
+import { getWritingType } from "@/lib/writingTypes";
 import OutlinePanel from "./OutlinePanel";
 import SectionNav from "./SectionNav";
 import Toolbar from "./Toolbar";
@@ -22,7 +23,8 @@ import { useCustomActions } from "@/lib/useCustomActions";
 import StatusBadge from "@/components/ui/StatusBadge";
 import SampleList from "@/components/Samples/SampleList";
 import ProfileCreator from "@/components/Samples/ProfileCreator";
-import TextbookUploadModal from "@/components/Textbooks/TextbookUploadModal";
+import BookUploadModal from "@/components/Books/BookUploadModal";
+import AddWebSourceModal from "@/components/WebSources/AddWebSourceModal";
 import ExtractionModal from "@/components/Evidence/ExtractionModal";
 import UploadToast from "@/components/ui/UploadToast";
 import type { UploadToastItem } from "@/components/ui/UploadToast";
@@ -37,7 +39,7 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
   const [essay, setEssay] = useState<Essay | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [aiOpen, setAiOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(true);
   const [samplesOpen, setSamplesOpen] = useState(false);
   const [profileCreatorOpen, setProfileCreatorOpen] = useState(false);
   const [sampleCount, setSampleCount] = useState(0);
@@ -46,13 +48,16 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
   const [editorInstance, setEditorInstance] = useState<any>(null);
   const [scrollContainer, setScrollContainer] = useState<HTMLDivElement | null>(null);
   const [wordCount, setWordCount] = useState(0);
-  const [textbooks, setTextbooks] = useState<Textbook[]>([]);
+  const [books, setBooks] = useState<Book[]>([]);
+  const [webSources, setWebSources] = useState<WebSource[]>([]);
   const [evidenceItems, setEvidenceItems] = useState<EvidenceItem[]>([]);
-  const [textbookUploadOpen, setTextbookUploadOpen] = useState(false);
+  const [bookUploadOpen, setBookUploadOpen] = useState(false);
+  const [addWebSourceOpen, setAddWebSourceOpen] = useState(false);
   const [extractionOpen, setExtractionOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [researchOpen, setResearchOpen] = useState(false);
   const [savedPapers, setSavedPapers] = useState<SavedPaper[]>([]);
+  const [outlineOpen, setOutlineOpen] = useState(true);
   const [startersOpen, setStartersOpen] = useState(false);
   const [writingPlanOpen, setWritingPlanOpen] = useState(false);
   const [generatingOutline, setGeneratingOutline] = useState(false);
@@ -62,6 +67,7 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
   const [detectionError, setDetectionError] = useState("");
   const [uploadToasts, setUploadToasts] = useState<UploadToastItem[]>([]);
   const [zoraPrefill, setZoraPrefill] = useState("");
+  const [exportOpen, setExportOpen] = useState(false);
 
   const { theme, toggleTheme } = useTheme();
   const { actions: customActions, addAction: addCustomAction, updateAction: updateCustomAction, deleteAction: deleteCustomAction } = useCustomActions();
@@ -94,10 +100,16 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
         const samples = await listSamples();
         setSampleCount(samples.length);
 
-        // Load textbooks
+        // Load books
         try {
-          const books = await listTextbooks();
-          setTextbooks(books);
+          const loadedBooks = await listBooks();
+          setBooks(loadedBooks);
+        } catch {}
+
+        // Load web sources
+        try {
+          const sources = await listWebSources();
+          setWebSources(sources);
         } catch {}
 
         // Load evidence
@@ -348,18 +360,25 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
     [essay, editorInstance, scheduleSave]
   );
 
-  const handleTextbookFileSelected = useCallback(
+  const handleBookFileSelected = useCallback(
     (file: File) => {
       const toastId = `upload-${Date.now()}`;
       setUploadToasts((prev) => [...prev, { id: toastId, filename: file.name, status: "uploading" }]);
-      uploadTextbook(file)
-        .then((textbook) => {
-          setTextbooks((prev) => [...prev, textbook]);
+      uploadBook(file)
+        .then((book) => {
+          setBooks((prev) => [...prev, book]);
           setUploadToasts((prev) => prev.map((t) => t.id === toastId ? { ...t, status: "success" } : t));
         })
         .catch((e) => {
           setUploadToasts((prev) => prev.map((t) => t.id === toastId ? { ...t, status: "error", error: e instanceof Error ? e.message : "Upload failed" } : t));
         });
+    },
+    []
+  );
+
+  const handleWebSourceAdded = useCallback(
+    (source: WebSource) => {
+      setWebSources((prev) => [...prev, source]);
     },
     []
   );
@@ -605,6 +624,8 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
     );
   }
 
+  const writingType = getWritingType(essay?.writing_type);
+
   return (
     <div className="flex flex-col h-screen bg-macos-bg text-macos-text overflow-hidden">
       {/* Top bar */}
@@ -626,6 +647,18 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
           >
             Voice
           </button>
+          {writingType.showOutlinePanel && (
+            <button
+              onClick={() => setOutlineOpen(!outlineOpen)}
+              className={`px-3 py-1 rounded-full text-xs font-medium border border-macos-border hover:border-macos-accent transition-colors ${
+                outlineOpen
+                  ? "text-macos-accent"
+                  : "text-macos-text-secondary hover:text-macos-text"
+              }`}
+            >
+              {writingType.outlineNoun}
+            </button>
+          )}
           <input
             className="bg-transparent text-xs text-macos-text-secondary outline-none border-b border-transparent focus:border-macos-accent px-1"
             value={essay?.title || ""}
@@ -642,26 +675,63 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
         </div>
         <div className="flex items-center gap-3">
           <StatusBadge status={status} />
-          <button
-            onClick={() => setSourcesOpen(!sourcesOpen)}
-            className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-              sourcesOpen
-                ? "border-macos-accent text-macos-accent"
-                : "border-macos-border hover:border-macos-accent text-macos-text-secondary hover:text-macos-text"
-            }`}
-          >
-            Sources{evidenceItems.length > 0 ? ` (${evidenceItems.length})` : ""}
-          </button>
-          <button
-            onClick={() => setResearchOpen(!researchOpen)}
-            className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-              researchOpen
-                ? "border-macos-accent text-macos-accent"
-                : "border-macos-border hover:border-macos-accent text-macos-text-secondary hover:text-macos-text"
-            }`}
-          >
-            Research
-          </button>
+          {writingType.showSourcesPanel && (
+            <button
+              onClick={() => setSourcesOpen(!sourcesOpen)}
+              className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                sourcesOpen
+                  ? "border-macos-accent text-macos-accent"
+                  : "border-macos-border hover:border-macos-accent text-macos-text-secondary hover:text-macos-text"
+              }`}
+            >
+              Sources{evidenceItems.length > 0 ? ` (${evidenceItems.length})` : ""}
+            </button>
+          )}
+          {writingType.showResearchPanel && (
+            <button
+              onClick={() => setResearchOpen(!researchOpen)}
+              className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                researchOpen
+                  ? "border-macos-accent text-macos-accent"
+                  : "border-macos-border hover:border-macos-accent text-macos-text-secondary hover:text-macos-text"
+              }`}
+            >
+              Research
+            </button>
+          )}
+          <div className="relative" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setExportOpen(false); }}>
+            <button
+              onClick={() => setExportOpen(!exportOpen)}
+              className="px-3 py-1 rounded-full text-xs font-medium border border-macos-border hover:border-macos-accent text-macos-text-secondary hover:text-macos-text transition-colors"
+              title="Export document"
+            >
+              Export
+            </button>
+            {exportOpen && (
+              <div className="absolute right-0 top-full mt-1 z-20 w-44 rounded-lg border border-macos-border bg-macos-elevated shadow-lg overflow-hidden">
+                <button
+                  onClick={() => { exportEssay(essay!.id, "md"); setExportOpen(false); }}
+                  className="w-full text-left px-3 py-2 text-xs text-macos-text hover:bg-macos-accent/10 transition-colors"
+                >
+                  Markdown (.md)
+                </button>
+                <button
+                  onClick={() => { exportEssay(essay!.id, "html"); setExportOpen(false); }}
+                  className="w-full text-left px-3 py-2 text-xs text-macos-text hover:bg-macos-accent/10 transition-colors border-t border-macos-border"
+                >
+                  HTML (.html)
+                </button>
+                {writingType.id === "screenplay" && (
+                  <button
+                    onClick={() => { exportEssay(essay!.id, "fountain"); setExportOpen(false); }}
+                    className="w-full text-left px-3 py-2 text-xs text-macos-text hover:bg-macos-accent/10 transition-colors border-t border-macos-border"
+                  >
+                    Fountain (.fountain)
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
           <button
             onClick={toggleTheme}
             className="px-3 py-1 rounded-full text-xs font-medium border border-macos-border hover:border-macos-accent text-macos-text-secondary hover:text-macos-text transition-colors"
@@ -675,44 +745,53 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
       {/* Body */}
       <div className="flex flex-1 overflow-hidden">
         {/* Outline panel */}
-        <OutlinePanel
-          sections={essay?.outline || []}
-          onUpdate={handleOutlineUpdate}
-          onSectionClick={handleSectionClick}
-          sampleCount={sampleCount}
-          profileId={essay?.profile_id || null}
-          profileName={profileName}
-          evidenceItems={evidenceItems}
-          onAssignEvidence={handleAssignEvidence}
-          onUnassignEvidence={handleUnassignEvidence}
-          onGenerateOutline={handleGenerateOutline}
-          generating={generatingOutline}
-          outlineError={outlineError}
-          startersOpen={startersOpen}
-          onStartersToggle={() => setStartersOpen(!startersOpen)}
-          onOpenSources={() => setSourcesOpen(true)}
-          savedPapers={savedPapers}
-          onAssignPaper={handleAssignPaper}
-          onUnassignPaper={handleUnassignPaper}
-        />
+        {writingType.showOutlinePanel && outlineOpen && (
+          <OutlinePanel
+            sections={essay?.outline || []}
+            onUpdate={handleOutlineUpdate}
+            onSectionClick={handleSectionClick}
+            sampleCount={sampleCount}
+            profileId={essay?.profile_id || null}
+            profileName={profileName}
+            evidenceItems={evidenceItems}
+            onAssignEvidence={handleAssignEvidence}
+            onUnassignEvidence={handleUnassignEvidence}
+            onGenerateOutline={handleGenerateOutline}
+            generating={generatingOutline}
+            outlineError={outlineError}
+            startersOpen={startersOpen}
+            onStartersToggle={() => setStartersOpen(!startersOpen)}
+            onOpenSources={() => setSourcesOpen(true)}
+            savedPapers={savedPapers}
+            onAssignPaper={handleAssignPaper}
+            onUnassignPaper={handleUnassignPaper}
+            sectionNoun={writingType.sectionNoun}
+            outlineNoun={writingType.outlineNoun}
+            editorInstance={editorInstance}
+            targetWordCount={essay?.target_word_count}
+          />
+        )}
 
         {/* Starters panel */}
-        <StartersPanel
-          open={startersOpen}
-          onClose={() => setStartersOpen(false)}
-          essayId={essay?.id || null}
-          profileId={essay?.profile_id || null}
-          topic={essay?.topic || ""}
-          thesis={essay?.thesis || ""}
-          citationStyle={essay?.citation_style}
-          instructions={essay?.instructions}
-          outlineSections={essay?.outline || []}
-          evidenceItems={evidenceItems}
-          onInsertText={handleTextGenerated}
-        />
+        {writingType.showOutlinePanel && outlineOpen && (
+          <StartersPanel
+            open={startersOpen}
+            onClose={() => setStartersOpen(false)}
+            essayId={essay?.id || null}
+            profileId={essay?.profile_id || null}
+            topic={essay?.topic || ""}
+            thesis={essay?.thesis || ""}
+            citationStyle={essay?.citation_style}
+            instructions={essay?.instructions}
+            outlineSections={essay?.outline || []}
+            evidenceItems={evidenceItems}
+            onInsertText={handleTextGenerated}
+            sectionNoun={writingType.sectionNoun}
+          />
+        )}
 
         {/* Section nav */}
-        <SectionNav editor={editorInstance} scrollContainer={scrollContainer} />
+        <SectionNav editor={editorInstance} scrollContainer={scrollContainer} sectionNoun={writingType.sectionNoun + "s"} />
 
         {/* Editor area */}
         <div className="flex flex-col flex-1 overflow-hidden">
@@ -776,34 +855,42 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
             onUpdateCustomAction={updateCustomAction}
             onDeleteCustomAction={deleteCustomAction}
             onCustomActionGenerate={handleBubbleCustomAction}
+            contentNoun={writingType.contentNoun}
           />
         )}
 
         {/* Sources Panel */}
-        <SourcesPanel
-          open={sourcesOpen}
-          onClose={() => setSourcesOpen(false)}
-          textbooks={textbooks}
-          onTextbooksChange={setTextbooks}
-          onUploadTextbook={() => setTextbookUploadOpen(true)}
-          onExtract={() => setExtractionOpen(true)}
-          evidenceItems={evidenceItems}
-          sections={essay?.outline || []}
-          onAssign={handleAssignEvidence}
-          onUnassign={handleUnassignEvidence}
-          onDelete={handleDeleteEvidence}
-        />
+        {writingType.showSourcesPanel && (
+          <SourcesPanel
+            open={sourcesOpen}
+            onClose={() => setSourcesOpen(false)}
+            books={books}
+            onBooksChange={setBooks}
+            onUploadBook={() => setBookUploadOpen(true)}
+            onExtract={() => setExtractionOpen(true)}
+            webSources={webSources}
+            onWebSourcesChange={setWebSources}
+            onAddWebSource={() => setAddWebSourceOpen(true)}
+            evidenceItems={evidenceItems}
+            sections={essay?.outline || []}
+            onAssign={handleAssignEvidence}
+            onUnassign={handleUnassignEvidence}
+            onDelete={handleDeleteEvidence}
+          />
+        )}
 
         {/* Research Panel */}
-        <ResearchPanel
-          open={researchOpen}
-          onClose={() => setResearchOpen(false)}
-          essayId={essay?.id || null}
-          citationStyle={essay?.citation_style}
-          onInsertCitation={handleTextGenerated}
-          onPaperSaved={handleResearchPaperSaved}
-          onPaperDeleted={handleResearchPaperDeleted}
-        />
+        {writingType.showResearchPanel && (
+          <ResearchPanel
+            open={researchOpen}
+            onClose={() => setResearchOpen(false)}
+            essayId={essay?.id || null}
+            citationStyle={essay?.citation_style}
+            onInsertCitation={handleTextGenerated}
+            onPaperSaved={handleResearchPaperSaved}
+            onPaperDeleted={handleResearchPaperDeleted}
+          />
+        )}
       </div>
 
       {/* Modals */}
@@ -814,8 +901,9 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
           essay={essay}
           onFieldChange={handleWritingPlanFieldChange}
           profileName={profileName}
-          textbooks={textbooks}
+          books={books}
           sampleCount={sampleCount}
+          writingType={writingType}
         />
       )}
       <SampleList
@@ -831,17 +919,23 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
         onClose={() => setProfileCreatorOpen(false)}
         onCreated={(profile) => handleProfileCreated(profile.id)}
       />
-      <TextbookUploadModal
-        open={textbookUploadOpen}
-        onClose={() => setTextbookUploadOpen(false)}
-        onFileSelected={handleTextbookFileSelected}
+      <BookUploadModal
+        open={bookUploadOpen}
+        onClose={() => setBookUploadOpen(false)}
+        onFileSelected={handleBookFileSelected}
+      />
+      <AddWebSourceModal
+        open={addWebSourceOpen}
+        onClose={() => setAddWebSourceOpen(false)}
+        essayId={essay?.id}
+        onAdded={handleWebSourceAdded}
       />
       {essay && (
         <ExtractionModal
           open={extractionOpen}
           onClose={() => setExtractionOpen(false)}
           essayId={essay.id}
-          textbooks={textbooks}
+          books={books}
           topic={essay.topic}
           thesis={essay.thesis}
           profileId={essay.profile_id}

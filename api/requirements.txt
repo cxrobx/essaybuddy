@@ -8,4 +8,6 @@ nltk==3.9.1
 textstat==0.7.4
 python-frontmatter==1.1.0
 httpx==0.28.1
+beautifulsoup4==4.12.3
+markdown==3.7
 pytest==8.3.4

@@ -2,7 +2,7 @@ import type {
   Essay, EssayListItem, Sample, SampleDetail,
   Profile, ProfileListItem, AIOutlineResult, AITextResult, AIScoreResult,
   AIDetectionRequest, AIDetectionResult, AIDetectionHistoryItem,
-  OutlineSection, Textbook, TextbookDetail, EvidenceStore, EvidenceItem,
+  OutlineSection, Book, BookDetail, WebSource, EvidenceStore, EvidenceItem,
   ExtractEvidenceRequest, ResearchPaper, SavedPaper, ResearchSearchResult,
   FormattedCitation, ChatRequest, ChatResponse,
   SentenceStartersResult,
@@ -17,11 +17,14 @@ export async function listEssays(): Promise<EssayListItem[]> {
   return res.json();
 }
 
-export async function createEssay(title?: string): Promise<Essay> {
+export async function createEssay(title?: string, writingType?: string): Promise<Essay> {
   const res = await fetch(`${BASE}/essays`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title: title || "Untitled Essay" }),
+    body: JSON.stringify({
+      title: title || "Untitled Essay",
+      writing_type: writingType || undefined,
+    }),
   });
   if (!res.ok) throw new Error("Failed to create essay");
   return res.json();
@@ -46,6 +49,26 @@ export async function updateEssay(id: string, data: Partial<Essay>): Promise<Ess
 export async function deleteEssay(id: string): Promise<void> {
   const res = await fetch(`${BASE}/essays/${id}`, { method: "DELETE" });
   if (!res.ok) throw new Error("Failed to delete essay");
+}
+
+export async function exportEssay(id: string, format: "md" | "html" | "fountain"): Promise<void> {
+  const res = await fetch(`${BASE}/essays/${id}/export?format=${format}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Export failed" }));
+    throw new Error(err.detail || "Export failed");
+  }
+  const blob = await res.blob();
+  const disposition = res.headers.get("Content-Disposition") || "";
+  const match = disposition.match(/filename="?([^"]+)"?/);
+  const filename = match?.[1] || `essay.${format}`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 export async function uploadOutline(file: File): Promise<{ sections: OutlineSection[] }> {
@@ -172,7 +195,7 @@ export async function expandSection(
     target_word_count: targetWordCount || undefined,
   };
   if (evidenceItems && evidenceItems.length > 0) {
-    body.evidence_items = evidenceItems.map((e) => ({ quote: e.quote, page_number: e.page_number, textbook_title: e.textbook_title, context: e.context }));
+    body.evidence_items = evidenceItems.map((e) => ({ quote: e.quote, page_number: e.page_number, source_title: e.source_title, context: e.context }));
   }
   if (paperIds && paperIds.length > 0) {
     body.paper_ids = paperIds;
@@ -209,7 +232,7 @@ export async function humanizeText(text: string, profileId: string): Promise<AIT
 export async function generateSentenceStarters(params: {
   essayId: string;
   profileId: string;
-  sections: { title: string; notes: string; evidence_items: { quote: string; page_number: number; textbook_title: string }[]; paper_ids?: string[] }[];
+  sections: { title: string; notes: string; evidence_items: { quote: string; page_number: number; source_title: string }[]; paper_ids?: string[] }[];
   topic?: string;
   thesis?: string;
   citationStyle?: string;
@@ -315,17 +338,17 @@ export async function getAIDetectionHistory(essayId: string): Promise<AIDetectio
   return res.json();
 }
 
-// Textbooks
-export async function listTextbooks(): Promise<Textbook[]> {
-  const res = await fetch(`${BASE}/textbooks`);
-  if (!res.ok) throw new Error("Failed to list textbooks");
+// Books
+export async function listBooks(): Promise<Book[]> {
+  const res = await fetch(`${BASE}/books`);
+  if (!res.ok) throw new Error("Failed to list books");
   return res.json();
 }
 
-export async function uploadTextbook(file: File): Promise<Textbook> {
+export async function uploadBook(file: File): Promise<Book> {
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch(`${BASE}/textbooks/upload`, { method: "POST", body: form });
+  const res = await fetch(`${BASE}/books/upload`, { method: "POST", body: form });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Upload failed" }));
     throw new Error(err.detail || "Upload failed");
@@ -333,30 +356,99 @@ export async function uploadTextbook(file: File): Promise<Textbook> {
   return res.json();
 }
 
-export async function getTextbook(id: string): Promise<TextbookDetail> {
-  const res = await fetch(`${BASE}/textbooks/${id}`);
-  if (!res.ok) throw new Error("Failed to get textbook");
+export async function getBook(id: string): Promise<BookDetail> {
+  const res = await fetch(`${BASE}/books/${id}`);
+  if (!res.ok) throw new Error("Failed to get book");
   return res.json();
 }
 
-export async function updateTextbookTitle(id: string, title: string): Promise<Textbook> {
-  const res = await fetch(`${BASE}/textbooks/${id}`, {
+export async function updateBook(id: string, data: Partial<Book>): Promise<Book> {
+  const res = await fetch(`${BASE}/books/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title }),
+    body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error("Failed to update textbook");
+  if (!res.ok) throw new Error("Failed to update book");
   return res.json();
 }
 
-export async function deleteTextbook(id: string): Promise<void> {
-  const res = await fetch(`${BASE}/textbooks/${id}`, { method: "DELETE" });
-  if (!res.ok) throw new Error("Failed to delete textbook");
+export async function deleteBook(id: string): Promise<void> {
+  const res = await fetch(`${BASE}/books/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Failed to delete book");
 }
 
-export async function getTextbookPages(id: string, start: number, end: number): Promise<{ pages: { page: number; text: string }[] }> {
-  const res = await fetch(`${BASE}/textbooks/${id}/pages?start=${start}&end=${end}`);
-  if (!res.ok) throw new Error("Failed to get textbook pages");
+export async function getBookPages(id: string, start: number, end: number): Promise<{ pages: { page: number; text: string }[] }> {
+  const res = await fetch(`${BASE}/books/${id}/pages?start=${start}&end=${end}`);
+  if (!res.ok) throw new Error("Failed to get book pages");
+  return res.json();
+}
+
+export async function lookupISBN(isbn: string): Promise<Partial<Book>> {
+  const res = await fetch(`${BASE}/books/isbn-lookup/${isbn}`);
+  if (!res.ok) throw new Error("Failed to look up ISBN");
+  return res.json();
+}
+
+export async function getBookCitation(id: string, style: string): Promise<FormattedCitation> {
+  const res = await fetch(`${BASE}/books/${id}/citation?style=${style}`);
+  if (!res.ok) throw new Error("Failed to get book citation");
+  return res.json();
+}
+
+// Web Sources
+export async function createWebSource(data: { url: string; title?: string; essay_id?: string }): Promise<WebSource> {
+  const res = await fetch(`${BASE}/web-sources`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to create web source" }));
+    throw new Error(err.detail || "Failed to create web source");
+  }
+  return res.json();
+}
+
+export async function listWebSources(): Promise<WebSource[]> {
+  const res = await fetch(`${BASE}/web-sources`);
+  if (!res.ok) throw new Error("Failed to list web sources");
+  return res.json();
+}
+
+export async function getWebSource(id: string): Promise<WebSource> {
+  const res = await fetch(`${BASE}/web-sources/${id}`);
+  if (!res.ok) throw new Error("Failed to get web source");
+  return res.json();
+}
+
+export async function updateWebSource(id: string, data: Partial<WebSource>): Promise<WebSource> {
+  const res = await fetch(`${BASE}/web-sources/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error("Failed to update web source");
+  return res.json();
+}
+
+export async function deleteWebSource(id: string): Promise<void> {
+  const res = await fetch(`${BASE}/web-sources/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Failed to delete web source");
+}
+
+export async function linkWebSourceToEssay(id: string, essayId: string, action: "link" | "unlink" = "link"): Promise<WebSource> {
+  const res = await fetch(`${BASE}/web-sources/${id}/link`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ essay_id: essayId, action }),
+  });
+  if (!res.ok) throw new Error("Failed to link web source");
+  return res.json();
+}
+
+export async function getWebSourceCitation(id: string, style: string): Promise<FormattedCitation> {
+  const res = await fetch(`${BASE}/web-sources/${id}/citation?style=${style}`);
+  if (!res.ok) throw new Error("Failed to get web source citation");
   return res.json();
 }
 

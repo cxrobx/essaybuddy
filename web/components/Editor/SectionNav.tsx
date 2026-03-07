@@ -26,9 +26,11 @@ function looksLikeSectionLabel(text: string): boolean {
 export default function SectionNav({
   editor,
   scrollContainer,
+  sectionNoun = "Sections",
 }: {
   editor: any;
   scrollContainer: HTMLElement | null;
+  sectionNoun?: string;
 }) {
   const [items, setItems] = useState<NavItem[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -221,7 +223,7 @@ export default function SectionNav({
   return (
     <nav className="w-40 flex-shrink-0 border-r border-macos-border bg-macos-surface flex flex-col overflow-hidden">
       <div className="px-2.5 py-2 text-[10px] font-semibold uppercase tracking-widest text-macos-text-secondary border-b border-macos-border">
-        Sections
+        {sectionNoun}
       </div>
       <div className="flex-1 overflow-y-auto py-2">
         {items.map((item) =>
