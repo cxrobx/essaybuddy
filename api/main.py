@@ -47,4 +47,5 @@ async def health():
 
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=API_PORT, reload=True)
+    is_dev = os.environ.get("ESSAYBUDDY_DEV", "0") == "1"
+    uvicorn.run("main:app", host="0.0.0.0", port=API_PORT, reload=is_dev)

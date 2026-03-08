@@ -666,6 +666,7 @@ export default function Editor({ essayId }: { essayId?: string | null }) {
             className="bg-transparent text-xs text-macos-text-secondary outline-none border-b border-transparent focus:border-macos-accent px-1"
             value={essay?.title || ""}
             onChange={(e) => handleTitleChange(e.target.value)}
+            size={Math.max(20, (essay?.title || "").length + 2)}
           />
         </div>
         <div className="flex justify-center">

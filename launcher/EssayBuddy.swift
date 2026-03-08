@@ -90,7 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             cwd: "\(repo)/api"
         )
         webProcess = shell(
-            "NEXT_PUBLIC_API_URL=http://localhost:8002 npm run dev",
+            "NEXT_PUBLIC_API_URL=http://localhost:8002 npm run serve",
             cwd: "\(repo)/web"
         )
 

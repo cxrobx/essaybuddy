@@ -237,6 +237,7 @@ export async function generateSentenceStarters(params: {
   thesis?: string;
   citationStyle?: string;
   instructions?: string;
+  regenerateInstructions?: string;
 }): Promise<SentenceStartersResult> {
   const res = await fetch(`${BASE}/ai/sentence-starters`, {
     method: "POST",
@@ -249,6 +250,7 @@ export async function generateSentenceStarters(params: {
       thesis: params.thesis,
       citation_style: params.citationStyle,
       instructions: params.instructions,
+      regenerate_instructions: params.regenerateInstructions || undefined,
     }),
   });
   if (!res.ok) throw new Error("Failed to generate sentence starters");

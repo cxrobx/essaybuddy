@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev --port 3031",
     "build": "next build",
-    "start": "next start",
+    "start": "next start --port 3031",
+    "serve": "npm run build && next start --port 3031",
     "lint": "next lint"
   },
   "dependencies": {

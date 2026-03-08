@@ -88,6 +88,7 @@ class SentenceStartersRequest(BaseModel):
     thesis: Optional[str] = None
     citation_style: Optional[str] = None
     instructions: Optional[str] = None
+    regenerate_instructions: Optional[str] = None
 
 
 class GenerateFullEssayRequest(BaseModel):
@@ -579,7 +580,7 @@ async def sentence_starters(body: SentenceStartersRequest):
 {samples_ctx}
 {briefing}
 
-Generate 3 sentence starters for each of the following {type_cfg.section_noun}s. {directive}
+{f'<regeneration-instructions>{chr(10)}{body.regenerate_instructions}{chr(10)}</regeneration-instructions>{chr(10)}{chr(10)}' if body.regenerate_instructions else ''}Generate 3 sentence starters for each of the following {type_cfg.section_noun}s. {directive}
 
 CRITICAL: Each sentence starter must include parenthetical references with the evidence, source info, and any context the writer needs to complete the sentence. For example:
 - "While many scholars have debated the causes of X (Smith, p.42 notes that '...'; see also Johnson's analysis of...), "
