@@ -3,8 +3,9 @@ import type { NextConfig } from "next";
 const isDev = process.env.NODE_ENV === "development";
 
 const nextConfig: NextConfig = {
-  // standalone causes .next cache corruption and HMR chunk errors during local dev
-  ...(isDev ? {} : { output: "standalone" }),
+  // Production builds use a separate directory so standalone output
+  // never corrupts the dev server's .next/ cache
+  ...(isDev ? {} : { output: "standalone", distDir: ".next-prod" }),
 };
 
 export default nextConfig;

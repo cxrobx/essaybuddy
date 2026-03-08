@@ -258,7 +258,33 @@ async def delete_essay(essay_id: str):
     checks_path = _essays_dir() / f"{essay_id}.ai-checks.json"
     if checks_path.exists():
         checks_path.unlink()
+    starters_path = _essays_dir() / f"{essay_id}.starters.json"
+    if starters_path.exists():
+        starters_path.unlink()
     return {"deleted": True}
+
+
+@router.get("/{essay_id}/starters")
+async def get_starters(essay_id: str):
+    path = _essays_dir() / f"{essay_id}.starters.json"
+    if not path.exists():
+        return {"sections": []}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return {"sections": data if isinstance(data, list) else []}
+    except json.JSONDecodeError:
+        return {"sections": []}
+
+
+@router.put("/{essay_id}/starters")
+async def save_starters(essay_id: str, body: dict):
+    sections = body.get("sections", [])
+    path = _essays_dir() / f"{essay_id}.starters.json"
+    if sections:
+        atomic_write(path, json.dumps(sections, indent=2))
+    elif path.exists():
+        path.unlink()
+    return {"sections": sections}
 
 
 @router.get("/{essay_id}/export")

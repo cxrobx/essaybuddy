@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import type { OutlineSection, EvidenceItem, SentenceStarterSection } from "@/lib/types";
-import { generateSentenceStarters } from "@/lib/api";
+import { generateSentenceStarters, getSavedStarters, saveStarters } from "@/lib/api";
 import { useResizablePanel } from "@/lib/useResizablePanel";
 
 export default function StartersPanel({
@@ -43,6 +43,14 @@ export default function StartersPanel({
   const [starterRegenPopover, setStarterRegenPopover] = useState<string | null>(null);
   const { width: panelWidth, handleMouseDown } = useResizablePanel(288, "left");
 
+  // Load saved starters on mount / essay change
+  useEffect(() => {
+    if (!essayId) return;
+    getSavedStarters(essayId).then((result) => {
+      if (result.sections.length > 0) setStarters(result.sections);
+    }).catch(() => {});
+  }, [essayId]);
+
   if (!open) return null;
 
   const canGenerate = !!profileId && outlineSections.length > 0;
@@ -79,6 +87,7 @@ export default function StartersPanel({
         instructions,
       });
       setStarters(result.sections);
+      saveStarters(essayId, result.sections).catch(() => {});
     } catch (e) {
       setError(e instanceof Error ? e.message : "Generation failed");
     } finally {
@@ -110,6 +119,7 @@ export default function StartersPanel({
         setStarters((prev) => {
           const updated = [...prev];
           updated[sectionIndex] = result.sections[0];
+          saveStarters(essayId, updated).catch(() => {});
           return updated;
         });
       }
@@ -150,9 +160,9 @@ export default function StartersPanel({
         setStarters((prev) => {
           const updated = [...prev];
           const updatedSection = { ...updated[sectionIndex], starters: [...updated[sectionIndex].starters] };
-          // Take the first starter from the result as the replacement
           updatedSection.starters[starterIndex] = result.sections[0].starters[0];
           updated[sectionIndex] = updatedSection;
+          saveStarters(essayId, updated).catch(() => {});
           return updated;
         });
       }

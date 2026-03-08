@@ -5,7 +5,7 @@ import type {
   OutlineSection, Book, BookDetail, WebSource, EvidenceStore, EvidenceItem,
   ExtractEvidenceRequest, ResearchPaper, SavedPaper, ResearchSearchResult,
   FormattedCitation, ChatRequest, ChatResponse,
-  SentenceStartersResult,
+  SentenceStartersResult, SentenceStarterSection,
 } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8002";
@@ -80,6 +80,21 @@ export async function uploadOutline(file: File): Promise<{ sections: OutlineSect
     throw new Error(err.detail || "Failed to parse outline");
   }
   return res.json();
+}
+
+// Sentence Starters (persistence)
+export async function getSavedStarters(essayId: string): Promise<SentenceStartersResult> {
+  const res = await fetch(`${BASE}/essays/${essayId}/starters`);
+  if (!res.ok) return { sections: [] };
+  return res.json();
+}
+
+export async function saveStarters(essayId: string, sections: SentenceStarterSection[]): Promise<void> {
+  await fetch(`${BASE}/essays/${essayId}/starters`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sections }),
+  });
 }
 
 // Samples
