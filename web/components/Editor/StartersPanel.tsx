@@ -39,6 +39,8 @@ export default function StartersPanel({
   const [sectionLoading, setSectionLoading] = useState<Record<number, boolean>>({});
   const [sectionError, setSectionError] = useState<Record<number, string>>({});
   const [regenPopoverIdx, setRegenPopoverIdx] = useState<number | null>(null);
+  const [starterLoading, setStarterLoading] = useState<Record<string, boolean>>({});
+  const [starterRegenPopover, setStarterRegenPopover] = useState<string | null>(null);
   const { width: panelWidth, handleMouseDown } = useResizablePanel(288, "left");
 
   if (!open) return null;
@@ -121,6 +123,46 @@ export default function StartersPanel({
     }
   };
 
+  const handleRegenerateStarter = async (sectionIndex: number, starterIndex: number, customInstructions?: string) => {
+    if (!essayId || !profileId) return;
+    const sec = outlineSections[sectionIndex];
+    if (!sec) return;
+
+    const key = `${sectionIndex}-${starterIndex}`;
+    setStarterRegenPopover(null);
+    setStarterLoading((prev) => ({ ...prev, [key]: true }));
+
+    try {
+      const baseInstr = customInstructions
+        ? `Regenerate only starter #${starterIndex + 1}. ${customInstructions}`
+        : `Regenerate only starter #${starterIndex + 1} with fresh phrasing.`;
+      const result = await generateSentenceStarters({
+        essayId,
+        profileId,
+        sections: [buildSectionPayload(sec)],
+        topic: topic || undefined,
+        thesis: thesis || undefined,
+        citationStyle,
+        instructions,
+        regenerateInstructions: baseInstr,
+      });
+      if (result.sections.length > 0 && result.sections[0].starters.length > 0) {
+        setStarters((prev) => {
+          const updated = [...prev];
+          const updatedSection = { ...updated[sectionIndex], starters: [...updated[sectionIndex].starters] };
+          // Take the first starter from the result as the replacement
+          updatedSection.starters[starterIndex] = result.sections[0].starters[0];
+          updated[sectionIndex] = updatedSection;
+          return updated;
+        });
+      }
+    } catch {
+      // Silent fail for individual starter — section-level errors are more useful
+    } finally {
+      setStarterLoading((prev) => ({ ...prev, [key]: false }));
+    }
+  };
+
   const handleCopy = async (text: string, id: string) => {
     await navigator.clipboard.writeText(text);
     setCopiedId(id);
@@ -175,7 +217,7 @@ export default function StartersPanel({
         {starters.map((section, sIdx) => (
           <div key={sIdx} className="relative">
             <div className="flex items-center justify-between mb-1.5 gap-1">
-              <h4 className="text-[11px] font-semibold text-macos-text truncate flex-1">
+              <h4 className="text-[11px] font-semibold text-macos-text break-words min-w-0 flex-1">
                 {section.section_title}
               </h4>
               {!loading && !sectionLoading[sIdx] && (
@@ -201,26 +243,47 @@ export default function StartersPanel({
               <div className="space-y-2">
                 {section.starters.map((starter, i) => {
                   const starterId = `${sIdx}-${i}`;
+                  const isStarterLoading = starterLoading[starterId];
                   return (
                     <div
                       key={starterId}
-                      className="group bg-macos-bg rounded border border-macos-border p-2 text-[11px] text-macos-text leading-relaxed hover:border-macos-accent/50 transition-colors"
+                      className="group relative bg-macos-bg rounded border border-macos-border p-2 text-[11px] text-macos-text leading-relaxed hover:border-macos-accent/50 transition-colors"
                     >
-                      <p className="mb-1.5">{starter}</p>
-                      <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => onInsertText(starter)}
-                          className="px-2 py-0.5 rounded text-[10px] font-medium bg-macos-accent/10 text-macos-accent hover:bg-macos-accent/20 transition-colors"
-                        >
-                          Insert
-                        </button>
-                        <button
-                          onClick={() => handleCopy(starter, starterId)}
-                          className="px-2 py-0.5 rounded text-[10px] font-medium bg-macos-border/50 text-macos-text-secondary hover:text-macos-text transition-colors"
-                        >
-                          {copiedId === starterId ? "Copied!" : "Copy"}
-                        </button>
-                      </div>
+                      {isStarterLoading ? (
+                        <SectionRegenerating />
+                      ) : (
+                        <>
+                          <p className="mb-1.5">{starter}</p>
+                          <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => onInsertText(starter)}
+                              className="px-2 py-0.5 rounded text-[10px] font-medium bg-macos-accent/10 text-macos-accent hover:bg-macos-accent/20 transition-colors"
+                            >
+                              Insert
+                            </button>
+                            <button
+                              onClick={() => handleCopy(starter, starterId)}
+                              className="px-2 py-0.5 rounded text-[10px] font-medium bg-macos-border/50 text-macos-text-secondary hover:text-macos-text transition-colors"
+                            >
+                              {copiedId === starterId ? "Copied!" : "Copy"}
+                            </button>
+                            <button
+                              onClick={() => setStarterRegenPopover(starterRegenPopover === starterId ? null : starterId)}
+                              className="px-1.5 py-0.5 rounded text-macos-text-secondary hover:text-macos-accent hover:bg-macos-accent/10 transition-colors ml-auto"
+                              title="Regenerate this starter"
+                            >
+                              <RefreshIcon />
+                            </button>
+                          </div>
+                          {starterRegenPopover === starterId && (
+                            <RegeneratePopover
+                              onQuickRegen={() => handleRegenerateStarter(sIdx, i)}
+                              onCustomRegen={(instr) => handleRegenerateStarter(sIdx, i, instr)}
+                              onClose={() => setStarterRegenPopover(null)}
+                            />
+                          )}
+                        </>
+                      )}
                     </div>
                   );
                 })}
@@ -290,7 +353,7 @@ function RegeneratePopover({
     >
       <button
         onClick={onQuickRegen}
-        className="w-full text-left px-2 py-1.5 rounded text-[11px] text-macos-text hover:bg-macos-accent/10 transition-colors"
+        className="w-full px-2 py-1.5 rounded text-[11px] font-medium bg-macos-accent/10 text-macos-accent hover:bg-macos-accent/20 transition-colors"
       >
         Regenerate based on updates
       </button>

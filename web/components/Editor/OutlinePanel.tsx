@@ -226,7 +226,7 @@ export default function OutlinePanel({
                 />
               ) : (
                 <span
-                  className="flex-1 text-xs font-medium text-macos-text cursor-pointer truncate"
+                  className="flex-1 text-xs font-medium text-macos-text cursor-pointer break-words min-w-0"
                   onClick={() => onSectionClick(section)}
                   onDoubleClick={() => setEditingId(section.id)}
                 >
