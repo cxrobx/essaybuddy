@@ -101,6 +101,14 @@ bash setup.sh   # Re-run after install
 
 You can still run manually via terminal without the app — see [Manual Start](#manual-start-without-the-app).
 
+## License
+
+[Business Source License 1.1](LICENSE), © 2026 CX Ventures LLC. The source is
+available and you may use it personally or inside your own organisation.
+Selling it, hosting it for others or bundling it into a commercial product
+needs a commercial licence. Each version becomes Apache-2.0 on 2030-09-30 or
+four years after its release, whichever comes first.
+
 ## Technical Docs
 
 See [AGENTS.md](AGENTS.md) for full architecture, API endpoints, data formats, and AI agent instructions.
